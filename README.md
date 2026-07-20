@@ -18,6 +18,7 @@ You read your journal ──email/password login────────┘  (sa
   - **Personal bearer token** (`jrnl_...`, for Claude Code CLI / scripts): **stored hashed (SHA-256)** — shown once at signup/rotation, rotatable from the dashboard.
 - **Viewer** at `/` — signup/login (email + PBKDF2-hashed password), entry feed, search, tag filters, stats. Sessions are HMAC-signed HTTP-only cookies.
 - **Storage** — D1 (SQLite). Every query scoped `WHERE user_id = ?`.
+- **Rate limiting** — Workers native binding, per-IP: 5/min on password endpoints (login, signup, authorize), 20/min on `/token`. 429 + `Retry-After: 60` when exceeded.
 
 ## Run locally
 

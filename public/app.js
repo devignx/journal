@@ -58,6 +58,7 @@ $("auth-form").addEventListener("submit", async (e) => {
       email_taken: "That email already has an account.",
       password_too_short: "Password needs at least 8 characters.",
       invalid_email: "That doesn't look like an email.",
+      rate_limited: "Too many attempts — wait a minute, then retry.",
     };
     const el = $("auth-error");
     el.textContent = messages[err.message] || "Something went wrong. Try again.";

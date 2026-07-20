@@ -14,6 +14,22 @@ function json(data, status = 200, headers = {}) {
   return Response.json(data, { status, headers });
 }
 
+// True when this IP exhausted the given limiter. Fails open if the
+// binding is missing (e.g. older local dev state) — auth still works.
+async function ipLimited(limiter, request) {
+  if (!limiter) return false;
+  const ip = request.headers.get("CF-Connecting-IP") || "local";
+  const { success } = await limiter.limit({ key: ip });
+  return !success;
+}
+
+function rateLimitPage() {
+  return new Response("Too many attempts. Wait a minute, then retry.", {
+    status: 429,
+    headers: { "Content-Type": "text/plain", "Retry-After": "60" },
+  });
+}
+
 async function sessionUser(request, env) {
   const userId = await parseSessionCookieValue(env.SESSION_SECRET, getCookie(request, "session"));
   return userId ? store.getUserById(env.DB, userId) : null;
@@ -38,9 +54,17 @@ export default {
     if (pathname === "/register" && method === "POST") return oauth.register(request, env.DB);
     if (pathname === "/authorize" && method === "GET")
       return oauth.authorizeGet(request, env.DB, url);
-    if (pathname === "/authorize" && method === "POST")
+    if (pathname === "/authorize" && method === "POST") {
+      if (await ipLimited(env.AUTH_LIMITER, request)) return rateLimitPage();
       return oauth.authorizePost(request, env.DB);
-    if (pathname === "/token" && method === "POST") return oauth.token(request, env.DB);
+    }
+    if (pathname === "/token" && method === "POST") {
+      if (await ipLimited(env.TOKEN_LIMITER, request))
+        return json({ error: "rate_limited", error_description: "Too many requests" }, 429, {
+          "Retry-After": "60",
+        });
+      return oauth.token(request, env.DB);
+    }
 
     // ---------- MCP (bearer: OAuth access token OR personal jrnl_ token) ----------
     if (pathname === "/mcp") {
@@ -71,6 +95,8 @@ export default {
 
     // ---------- auth API ----------
     if (pathname === "/api/signup" && method === "POST") {
+      if (await ipLimited(env.AUTH_LIMITER, request))
+        return json({ error: "rate_limited" }, 429, { "Retry-After": "60" });
       const { email, password } = await request.json().catch(() => ({}));
       if (!EMAIL_RE.test(email || "")) return json({ error: "invalid_email" }, 400);
       if (!password || password.length < 8)
@@ -89,6 +115,8 @@ export default {
     }
 
     if (pathname === "/api/login" && method === "POST") {
+      if (await ipLimited(env.AUTH_LIMITER, request))
+        return json({ error: "rate_limited" }, 429, { "Retry-After": "60" });
       const { email, password } = await request.json().catch(() => ({}));
       const user = await store.authenticate(env.DB, email || "", password || "");
       if (!user) return json({ error: "invalid_credentials" }, 401);
