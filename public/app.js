@@ -2,12 +2,16 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   mode: "login", // or "signup"
-  entries: [],
+  entries: [], // everything loaded so far (server order: newest first)
   offset: 0,
   limit: 50,
-  activeTag: null,
+  activeTag: "",
+  sort: "desc", // "desc" newest first | "asc" oldest first
+  totalEntries: 0,
+  expanded: new Set(), // date keys the user opened; newest group auto-opens
   me: null,
   freshToken: null, // MCP token, present only right after signup/rotation
+  provider: "claude",
 };
 
 async function api(path, opts = {}) {
@@ -51,7 +55,7 @@ $("auth-form").addEventListener("submit", async (e) => {
     });
     if (res.mcp_token) state.freshToken = res.mcp_token; // shown once — keep for this page load
     await enterApp();
-    if (state.freshToken) openSettings(); // new signup: surface the token immediately
+    if (state.freshToken) openSettings(); // new signup: surface the connection setup immediately
   } catch (err) {
     const messages = {
       invalid_credentials: "Wrong email or password.",
@@ -66,25 +70,63 @@ $("auth-form").addEventListener("submit", async (e) => {
   }
 });
 
-$("logout-link").addEventListener("click", async (e) => {
-  e.preventDefault();
+// ---------- account dropdown ----------
+
+const account = $("account");
+
+$("account-trigger").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = account.classList.toggle("open");
+  $("account-trigger").setAttribute("aria-expanded", open);
+});
+document.addEventListener("click", () => {
+  account.classList.remove("open");
+  $("account-trigger").setAttribute("aria-expanded", "false");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") account.classList.remove("open");
+});
+
+$("menu-settings").addEventListener("click", () => {
+  account.classList.remove("open");
+  openSettings();
+});
+
+$("menu-logout").addEventListener("click", async () => {
   await api("/api/logout", { method: "POST" });
   location.reload();
 });
 
-// ---------- journal ----------
+// ---------- entry rendering ----------
+
+// Append text to node with bare URLs turned into safe links.
+function appendLinkified(node, text) {
+  const re = /https?:\/\/[^\s<>"')\]]+/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text))) {
+    node.append(text.slice(last, m.index));
+    const a = document.createElement("a");
+    a.href = m[0];
+    a.textContent = m[0];
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    node.append(a);
+    last = m.index + m[0].length;
+  }
+  node.append(text.slice(last));
+}
 
 function renderEntry(entry) {
   const el = document.createElement("article");
   el.className = "entry";
   const time = document.createElement("time");
   const d = new Date(entry.timestamp);
-  time.textContent = isNaN(d) ? entry.timestamp : d.toLocaleString(undefined, {
-    weekday: "short", year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  time.textContent = isNaN(d)
+    ? entry.timestamp
+    : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const p = document.createElement("p");
-  p.textContent = entry.content;
+  appendLinkified(p, entry.content);
   el.append(time, p);
   if (entry.tags && entry.tags.length) {
     const tags = document.createElement("div");
@@ -99,16 +141,85 @@ function renderEntry(entry) {
   return el;
 }
 
-function renderFeed(entries, { append = false } = {}) {
+// ---------- date grouping ----------
+
+function dateKey(ts) {
+  const d = new Date(ts);
+  return isNaN(d) ? "unknown" : d.toDateString();
+}
+
+function groupLabel(key) {
+  if (key === "unknown") return "undated";
+  const d = new Date(key);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "today";
+  if (d.toDateString() === yesterday.toDateString()) return "yesterday";
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+}
+
+function renderFeed() {
   const feed = $("feed");
-  if (!append) feed.innerHTML = "";
-  for (const e of entries) feed.append(renderEntry(e));
-  $("empty").classList.toggle("hidden", feed.children.length > 0);
+  feed.innerHTML = "";
+
+  const entries =
+    state.sort === "desc" ? state.entries : [...state.entries].reverse();
+
+  // group in display order
+  const groups = new Map();
+  for (const e of entries) {
+    const key = dateKey(e.timestamp);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+
+  let first = true;
+  for (const [key, list] of groups) {
+    if (first) {
+      state.expanded.add(key); // newest visible group starts open
+      first = false;
+    }
+    const group = document.createElement("section");
+    group.className = "group" + (state.expanded.has(key) ? " open" : "");
+
+    const head = document.createElement("button");
+    head.className = "group-head";
+    head.setAttribute("aria-expanded", state.expanded.has(key));
+    head.innerHTML = `<span class="chev">▶</span><span>${groupLabel(key)}</span><span class="n">${list.length}</span>`;
+    head.addEventListener("click", () => {
+      state.expanded.has(key) ? state.expanded.delete(key) : state.expanded.add(key);
+      group.classList.toggle("open");
+      head.setAttribute("aria-expanded", group.classList.contains("open"));
+    });
+
+    const body = document.createElement("div");
+    body.className = "group-body";
+    for (const e of list) body.append(renderEntry(e));
+
+    group.append(head, body);
+    feed.append(group);
+  }
+
+  $("empty").classList.toggle("hidden", state.entries.length > 0);
+  const filtered = $("search").value.trim() || state.activeTag;
   $("load-more").classList.toggle(
     "hidden",
-    entries.length < state.limit || state.activeTag || $("search").value
+    filtered || state.entries.length >= state.totalEntries
   );
+  renderCount();
 }
+
+function renderCount() {
+  const q = $("search").value.trim();
+  let text;
+  if (q) text = `${state.entries.length} matching “${q}”`;
+  else if (state.activeTag) text = `${state.entries.length} tagged ${state.activeTag}`;
+  else text = `${state.totalEntries} ${state.totalEntries === 1 ? "entry" : "entries"}`;
+  $("entry-count").textContent = text;
+}
+
+// ---------- data loading ----------
 
 async function loadEntries({ append = false } = {}) {
   const q = $("search").value.trim();
@@ -117,90 +228,210 @@ async function loadEntries({ append = false } = {}) {
   else if (state.activeTag) params.set("tag", state.activeTag);
   else if (append) params.set("offset", state.offset);
   const entries = await api(`/api/entries?${params}`);
-  if (append) state.offset += entries.length;
-  else state.offset = entries.length;
-  renderFeed(entries, { append });
+  if (append) {
+    state.entries = state.entries.concat(entries);
+    state.offset += entries.length;
+  } else {
+    state.entries = entries;
+    state.offset = entries.length;
+    state.expanded = new Set();
+  }
+  renderFeed();
 }
 
 async function loadTags() {
   const tags = await api("/api/tags");
-  const bar = $("tag-bar");
-  bar.innerHTML = "";
-  for (const { tag, count } of tags.slice(0, 20)) {
-    const btn = document.createElement("button");
-    btn.textContent = `${tag} ${count}`;
-    btn.classList.toggle("active", state.activeTag === tag);
-    btn.addEventListener("click", () => {
-      state.activeTag = state.activeTag === tag ? null : tag;
-      $("search").value = "";
-      loadTags();
-      loadEntries();
-    });
-    bar.append(btn);
+  const select = $("tag-filter");
+  const current = state.activeTag;
+  select.innerHTML = `<option value="">all tags</option>`;
+  for (const { tag, count } of tags) {
+    const opt = document.createElement("option");
+    opt.value = tag;
+    opt.textContent = `${tag} (${count})`;
+    if (tag === current) opt.selected = true;
+    select.append(opt);
   }
 }
 
 async function loadStats() {
   const s = await api("/api/stats");
-  $("stats-line").textContent = s.total_entries
-    ? `${s.total_entries} entries · ${s.entries_last_7_days} this week`
-    : "";
+  state.totalEntries = s.total_entries;
+  renderCount();
 }
+
+// ---------- toolbar ----------
 
 let searchTimer;
 $("search").addEventListener("input", () => {
   clearTimeout(searchTimer);
-  state.activeTag = null;
-  searchTimer = setTimeout(() => {
-    loadTags();
-    loadEntries();
-  }, 250);
+  state.activeTag = "";
+  $("tag-filter").value = "";
+  searchTimer = setTimeout(() => loadEntries(), 250);
+});
+
+$("tag-filter").addEventListener("change", () => {
+  state.activeTag = $("tag-filter").value;
+  $("search").value = "";
+  loadEntries();
+});
+
+$("sort-toggle").addEventListener("click", () => {
+  state.sort = state.sort === "desc" ? "asc" : "desc";
+  $("sort-toggle").textContent = state.sort === "desc" ? "newest ↓" : "oldest ↑";
+  state.expanded = new Set();
+  renderFeed();
 });
 
 $("load-more").addEventListener("click", () => loadEntries({ append: true }));
 
-// ---------- settings ----------
-
-function renderToken() {
-  const el = $("mcp-token");
-  if (state.freshToken) {
-    el.textContent = state.freshToken;
-    $("token-copy").classList.remove("hidden");
-    $("token-note").textContent =
-      "Copy it now — it won't be shown again after you leave this page.";
-  } else {
-    el.textContent = "(hidden — stored hashed)";
-    $("token-copy").classList.add("hidden");
-  }
-}
-
-function openSettings() {
-  $("mcp-url").textContent = state.me.mcp_url;
-  renderToken();
-  $("settings").showModal();
-}
-
-$("settings-link").addEventListener("click", (e) => {
+$("empty-connect").addEventListener("click", (e) => {
   e.preventDefault();
   openSettings();
 });
+
+// ---------- connections ----------
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+const TOKEN_PLACEHOLDER = "jrnl_YOUR_TOKEN";
+
+const PROVIDERS = [
+  {
+    id: "claude",
+    label: "Claude",
+    auth: "OAuth — no token needed",
+    usesToken: false,
+    render: (url) => `
+      <ol class="setup-steps">
+        <li>Open Claude → Settings → <strong>Connectors</strong> → <em>Add custom connector</em></li>
+        <li>Paste this URL — leave client id &amp; secret <strong>empty</strong>:
+          <div class="copy-row"><code>${esc(url)}</code><button data-copy="${esc(url)}">copy</button></div>
+        </li>
+        <li>Claude redirects here — log in with your journal email &amp; password</li>
+        <li>Done. In any chat: <em>“log this: …”</em></li>
+      </ol>`,
+  },
+  {
+    id: "claude-code",
+    label: "Claude Code",
+    auth: "Bearer token",
+    usesToken: true,
+    render: (url, token) => {
+      const cmd = `claude mcp add --transport http journal ${url} \\\n  --scope user --header "Authorization: Bearer ${token}"`;
+      return `
+      <ol class="setup-steps">
+        <li>Run in your terminal:
+          <div class="copy-row"><pre>${esc(cmd)}</pre><button data-copy="${esc(cmd)}">copy</button></div>
+        </li>
+        <li>Restart Claude Code — <span class="mono">journal_*</span> tools appear</li>
+      </ol>`;
+    },
+  },
+  {
+    id: "opencode",
+    label: "opencode",
+    auth: "Bearer token",
+    usesToken: true,
+    render: (url, token) => {
+      const cfg = `{\n  "mcp": {\n    "journal": {\n      "type": "remote",\n      "url": "${url}",\n      "headers": { "Authorization": "Bearer ${token}" },\n      "enabled": true\n    }\n  }\n}`;
+      return `
+      <ol class="setup-steps">
+        <li>Merge into <span class="mono">~/.config/opencode/opencode.json</span>:
+          <div class="copy-row"><pre>${esc(cfg)}</pre><button data-copy="${esc(cfg)}">copy</button></div>
+        </li>
+        <li>Restart opencode</li>
+      </ol>`;
+    },
+  },
+  {
+    id: "other",
+    label: "Other",
+    auth: "OAuth or bearer token",
+    usesToken: true,
+    render: (url, token) => `
+      <ol class="setup-steps">
+        <li>MCP endpoint (Streamable HTTP):
+          <div class="copy-row"><code>${esc(url)}</code><button data-copy="${esc(url)}">copy</button></div>
+        </li>
+        <li>Clients with OAuth support discover it automatically — just add the URL and log in when redirected</li>
+        <li>Clients without OAuth: send header
+          <div class="copy-row"><code>Authorization: Bearer ${esc(token)}</code><button data-copy="Authorization: Bearer ${esc(token)}">copy</button></div>
+        </li>
+      </ol>`,
+  },
+];
+
+function renderProviderTabs() {
+  const tabs = $("provider-tabs");
+  tabs.innerHTML = "";
+  for (const p of PROVIDERS) {
+    const btn = document.createElement("button");
+    btn.textContent = p.label;
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", state.provider === p.id);
+    btn.addEventListener("click", () => {
+      state.provider = p.id;
+      renderProviderTabs();
+      renderProviderPane();
+    });
+    tabs.append(btn);
+  }
+}
+
+function renderProviderPane() {
+  const p = PROVIDERS.find((x) => x.id === state.provider);
+  const url = state.me.mcp_url;
+  const token = state.freshToken || TOKEN_PLACEHOLDER;
+  let html = `<span class="auth-badge">${esc(p.auth)}</span>` + p.render(url, token);
+
+  if (p.usesToken) {
+    html += `<div class="token-block">
+      <label>Your token</label>`;
+    if (state.freshToken) {
+      html += `<div class="copy-row"><code>${esc(state.freshToken)}</code><button data-copy="${esc(state.freshToken)}">copy</button></div>
+        <p class="token-note fresh">Copy it now — it won't be shown again after you leave this page. The snippets above already include it.</p>`;
+    } else {
+      html += `<p class="token-note">Tokens are stored hashed and can't be re-shown. Lost yours? Rotate — the old one stops working immediately (Claude's OAuth connection is separate and unaffected).</p>`;
+    }
+    html += `<div class="copy-row"><button id="token-rotate">rotate token</button></div></div>`;
+  }
+
+  $("provider-pane").innerHTML = html;
+
+  const rotate = $("token-rotate");
+  if (rotate)
+    rotate.addEventListener("click", async () => {
+      if (
+        !confirm(
+          "Rotate token? The old token stops working immediately — every client using it needs the new one."
+        )
+      )
+        return;
+      const res = await api("/api/rotate-token", { method: "POST" });
+      state.freshToken = res.mcp_token;
+      renderProviderPane();
+    });
+}
+
+// one delegated handler for every copy button in the dialog
+$("provider-pane").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-copy]");
+  if (!btn) return;
+  await navigator.clipboard.writeText(btn.dataset.copy);
+  const original = btn.textContent;
+  btn.textContent = "copied";
+  setTimeout(() => (btn.textContent = original), 1200);
+});
+
+function openSettings() {
+  renderProviderTabs();
+  renderProviderPane();
+  $("settings").showModal();
+}
+
 $("settings-close").addEventListener("click", () => $("settings").close());
-$("token-rotate").addEventListener("click", async () => {
-  if (
-    !confirm(
-      "Rotate token? The old token stops working immediately — you'll need to update the connector in Claude settings."
-    )
-  )
-    return;
-  const res = await api("/api/rotate-token", { method: "POST" });
-  state.freshToken = res.mcp_token;
-  renderToken();
-});
-$("token-copy").addEventListener("click", async () => {
-  await navigator.clipboard.writeText(state.freshToken);
-  $("token-copy").textContent = "copied";
-  setTimeout(() => ($("token-copy").textContent = "copy"), 1200);
-});
 
 // ---------- boot ----------
 
@@ -208,7 +439,10 @@ async function enterApp() {
   state.me = await api("/api/me");
   $("auth").classList.add("hidden");
   $("app").classList.remove("hidden");
-  await Promise.all([loadEntries(), loadTags(), loadStats()]);
+  $("avatar").textContent = state.me.email[0];
+  $("account-email").textContent = state.me.email;
+  await Promise.all([loadStats(), loadTags()]);
+  await loadEntries();
 }
 
 (async () => {

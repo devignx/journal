@@ -7,17 +7,35 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Roboto+Flex:opsz,wght@8..144,300..700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Roboto+Flex:opsz,wght@8..144,300..700&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="logo-body" x1="9.75831" y1="7.51943" x2="42.5" y2="76.5" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#C1A7FF" />
+        <stop offset="1" stop-color="#6F00FF" />
+      </linearGradient>
+      <linearGradient id="logo-dot" x1="40" y1="18" x2="19.5" y2="-3" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#9747FF" />
+        <stop offset="1" stop-color="#00F6FF" />
+      </linearGradient>
+    </defs>
+  </svg>
+
   <!-- auth screen -->
   <section id="auth" class="auth hidden">
+    <div class="glow" aria-hidden="true"></div>
     <div class="auth-box">
-      <h1>Journal</h1>
-      <p class="muted">A log you write by talking to Claude.</p>
+      <svg class="auth-logo" viewBox="0 0 62 60" fill="none" aria-hidden="true">
+        <path d="M44.0724 16.1665C48.8695 11.3694 56.9546 11.3672 59.4736 17.6663C60.1656 19.3967 60.7 21.1954 61.0656 23.0413C62.2335 28.9383 61.6258 35.0524 59.3195 40.6104C57.0131 46.1683 53.1117 50.9206 48.1085 54.2661C43.1053 57.6116 37.2251 59.4002 31.2114 59.4056C25.1977 59.4111 19.3207 57.6331 14.3236 54.2966C9.32643 50.9601 5.43356 46.2149 3.13725 40.6611C0.840947 35.1073 0.244337 28.9943 1.42287 23.0951C1.79308 21.242 2.33324 19.4362 3.03196 17.6988C5.56333 11.4047 13.6471 11.4083 18.4442 16.2054L22.5529 20.3141C27.35 25.1112 35.1277 25.1112 39.9248 20.3141L44.0724 16.1665Z" fill="url(#logo-body)" />
+        <circle cx="31" cy="9" r="9" fill="url(#logo-dot)" />
+      </svg>
+      <h1>journal</h1>
+      <p class="muted">a log you write by talking to your AI</p>
       <form id="auth-form">
         <input id="email" type="email" placeholder="email" autocomplete="email" required />
         <input id="password" type="password" placeholder="password (min 8 chars)" autocomplete="current-password" minlength="8" required />
@@ -28,54 +46,77 @@
         <a href="#" id="auth-toggle-link">Sign up</a>
       </p>
       <p id="auth-error" class="error hidden"></p>
+      <p class="auth-about"><a href="/home">what is this?</a></p>
     </div>
   </section>
 
   <!-- journal screen -->
   <section id="app" class="app hidden">
     <header>
-      <h1>Journal</h1>
-      <nav>
-        <span id="stats-line" class="muted mono"></span>
-        <a href="#" id="settings-link">connect</a>
-        <a href="#" id="logout-link">log out</a>
-      </nav>
+      <div class="brand">
+        <svg viewBox="0 0 62 60" fill="none" aria-hidden="true">
+          <path d="M44.0724 16.1665C48.8695 11.3694 56.9546 11.3672 59.4736 17.6663C60.1656 19.3967 60.7 21.1954 61.0656 23.0413C62.2335 28.9383 61.6258 35.0524 59.3195 40.6104C57.0131 46.1683 53.1117 50.9206 48.1085 54.2661C43.1053 57.6116 37.2251 59.4002 31.2114 59.4056C25.1977 59.4111 19.3207 57.6331 14.3236 54.2966C9.32643 50.9601 5.43356 46.2149 3.13725 40.6611C0.840947 35.1073 0.244337 28.9943 1.42287 23.0951C1.79308 21.242 2.33324 19.4362 3.03196 17.6988C5.56333 11.4047 13.6471 11.4083 18.4442 16.2054L22.5529 20.3141C27.35 25.1112 35.1277 25.1112 39.9248 20.3141L44.0724 16.1665Z" fill="url(#logo-body)" />
+          <circle cx="31" cy="9" r="9" fill="url(#logo-dot)" />
+        </svg>
+        <h1>Journal</h1>
+      </div>
+      <div class="account" id="account">
+        <button
+          class="account-trigger"
+          id="account-trigger"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-label="Account menu"
+        >
+          <span class="avatar" id="avatar">?</span>
+          <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <div class="account-menu" role="menu">
+          <p class="account-email muted mono" id="account-email"></p>
+          <button role="menuitem" id="menu-settings">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 5.2A2.8 2.8 0 1 0 8 10.8 2.8 2.8 0 0 0 8 5.2Zm5.9 2.8a5.9 5.9 0 0 0-.08-.94l1.55-1.2-1.5-2.6-1.83.73a5.9 5.9 0 0 0-1.63-.94L10.1 1.1H7.1l-.31 1.95a5.9 5.9 0 0 0-1.63.94l-1.83-.73-1.5 2.6 1.55 1.2a5.9 5.9 0 0 0 0 1.88l-1.55 1.2 1.5 2.6 1.83-.73c.5.4 1.04.72 1.63.94l.31 1.95h3l.31-1.95a5.9 5.9 0 0 0 1.63-.94l1.83.73 1.5-2.6-1.55-1.2c.05-.31.08-.62.08-.94Z" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
+            </svg>
+            Connections
+          </button>
+          <button role="menuitem" id="menu-logout">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M6 2H3.5A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14H6M10.5 11 14 8l-3.5-3M14 8H6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Log out
+          </button>
+        </div>
+      </div>
     </header>
 
-    <div class="controls">
-      <input id="search" type="search" placeholder="search entries…" />
-      <div id="tag-bar" class="tag-bar"></div>
+    <div class="toolbar">
+      <span class="count" id="entry-count"></span>
+      <select id="tag-filter" aria-label="Filter by tag">
+        <option value="">all tags</option>
+      </select>
+      <button id="sort-toggle" aria-label="Toggle sort order">newest ↓</button>
+      <input id="search" type="search" placeholder="search…" />
     </div>
 
     <main id="feed"></main>
     <p id="empty" class="muted hidden">
-      No entries yet. Connect this journal to Claude (see “connect”) and say “log this”.
+      No entries yet. Open <a href="#" id="empty-connect">connections</a>, link an agent,
+      then say “log this: …” in any chat.
     </p>
     <button id="load-more" class="hidden">load more</button>
   </section>
 
-  <!-- settings / connector modal -->
+  <!-- connections modal -->
   <dialog id="settings">
-    <h2>Connect to Claude</h2>
-    <ol>
-      <li>Open Claude → Settings → Connectors → <em>Add custom connector</em></li>
-      <li>URL: <code id="mcp-url" class="mono"></code></li>
-      <li>Auth: Bearer token below</li>
-    </ol>
-    <label class="muted">Your MCP token (keep it secret)</label>
-    <div class="token-row">
-      <code id="mcp-token" class="mono"></code>
-      <button id="token-copy" class="hidden">copy</button>
-      <button id="token-rotate">rotate token</button>
+    <div class="dialog-head">
+      <h2>Connections</h2>
+      <button id="settings-close" aria-label="Close">✕</button>
     </div>
-    <p class="muted small" id="token-note">
-      Tokens are stored hashed — shown only once, at signup or rotation. Rotating kills the old
-      token immediately.
-    </p>
-    <p class="muted small">
-      Then in any chat: “log this: …” — the entry lands here.
-    </p>
-    <button id="settings-close">close</button>
+    <p class="muted small">Link an AI agent to this journal. Pick where you'll talk to it:</p>
+    <div class="provider-tabs" id="provider-tabs" role="tablist"></div>
+    <div id="provider-pane"></div>
   </dialog>
 
   <script src="/app.js"></script>

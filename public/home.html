@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Journal — a log you write by talking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Roboto+Flex:opsz,wght@8..144,300..700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --bg: #17171b;
+      --raise: #1e1e24;
+      --fg: #dde8f1;
+      --muted: #8b8f9a;
+      --line: #2a2a32;
+      --violet: #8b5cf6;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Roboto Flex", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    .mono { font-family: "JetBrains Mono", monospace; }
+    a { color: var(--fg); text-underline-offset: 3px; }
+
+    /* hero — compact, no full-page height */
+    .hero {
+      text-align: center;
+      padding: 5.5rem 1.5rem 3.5rem;
+    }
+    .logo { width: 52px; height: 50px; margin: 0 auto 2rem; display: block; }
+    .hero h1 {
+      font-size: clamp(2rem, 6vw, 3.2rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .hero .sub { color: var(--muted); font-size: 1.05rem; margin-top: 0.5rem; }
+    .pill {
+      display: inline-block;
+      background: #fff;
+      color: #17171b;
+      border: none;
+      border-radius: 999px;
+      padding: 0.85rem 2.4rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      margin-top: 2.5rem;
+    }
+    .pill:hover { transform: translateY(-1px); }
+    .learn { display: block; margin-top: 1.5rem; color: var(--muted); font-size: 0.9rem; }
+
+    /* sections */
+    section { max-width: 680px; margin: 0 auto; padding: 4rem 1.5rem; }
+    section h2 {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: lowercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 1.75rem;
+    }
+    .steps { display: grid; gap: 1.25rem; }
+    .step { display: flex; gap: 1rem; align-items: baseline; }
+    .step .n {
+      font-family: "JetBrains Mono", monospace;
+      color: var(--violet);
+      font-size: 0.85rem;
+      flex: none;
+    }
+    .step strong { font-weight: 600; }
+    .step p { color: var(--muted); font-size: 0.95rem; }
+
+    .providers { display: grid; gap: 0.75rem; }
+    .provider {
+      border: 1px solid var(--line);
+      background: var(--raise);
+      border-radius: 10px;
+      padding: 1rem 1.15rem;
+    }
+    .provider .head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+    .provider .name { font-weight: 600; }
+    .provider .badge {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.1rem 0.55rem;
+      white-space: nowrap;
+    }
+    .provider p { color: var(--muted); font-size: 0.9rem; margin-top: 0.35rem; }
+    .provider code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.8em;
+      color: var(--fg);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 0.05rem 0.35rem;
+      word-break: break-all;
+    }
+
+    .notes { display: grid; gap: 0.6rem; }
+    .notes li {
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.92rem;
+      padding-left: 1.1rem;
+      position: relative;
+    }
+    .notes li::before { content: "·"; position: absolute; left: 0; color: var(--violet); }
+    .notes strong { color: var(--fg); font-weight: 500; }
+
+    .tools { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .tools span {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.15rem 0.6rem;
+    }
+    .tools-note { color: var(--muted); font-size: 0.9rem; margin-top: 1rem; }
+
+    .cta { text-align: center; padding-bottom: 5rem; }
+
+    footer {
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-align: right;
+      padding: 1rem 1.25rem;
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div>
+      <svg class="logo" viewBox="0 0 62 60" fill="none" aria-hidden="true">
+        <path d="M44.0724 16.1665C48.8695 11.3694 56.9546 11.3672 59.4736 17.6663C60.1656 19.3967 60.7 21.1954 61.0656 23.0413C62.2335 28.9383 61.6258 35.0524 59.3195 40.6104C57.0131 46.1683 53.1117 50.9206 48.1085 54.2661C43.1053 57.6116 37.2251 59.4002 31.2114 59.4056C25.1977 59.4111 19.3207 57.6331 14.3236 54.2966C9.32643 50.9601 5.43356 46.2149 3.13725 40.6611C0.840947 35.1073 0.244337 28.9943 1.42287 23.0951C1.79308 21.242 2.33324 19.4362 3.03196 17.6988C5.56333 11.4047 13.6471 11.4083 18.4442 16.2054L22.5529 20.3141C27.35 25.1112 35.1277 25.1112 39.9248 20.3141L44.0724 16.1665Z" fill="url(#logo-body)"/>
+        <circle cx="31" cy="9" r="9" fill="url(#logo-dot)"/>
+        <defs>
+          <linearGradient id="logo-body" x1="9.75831" y1="7.51943" x2="42.5" y2="76.5" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#C1A7FF"/>
+            <stop offset="1" stop-color="#6F00FF"/>
+          </linearGradient>
+          <linearGradient id="logo-dot" x1="40" y1="18" x2="19.5" y2="-3" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#9747FF"/>
+            <stop offset="1" stop-color="#00F6FF"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <h1>a journal that writes itself</h1>
+      <p class="sub">talk to your AI — entries land here, tagged and searchable</p>
+      <a class="pill" href="/">SIGN UP</a>
+      <a class="learn" href="#how">Learn More</a>
+    </div>
+  </div>
+
+  <section id="how">
+    <h2>how it works</h2>
+    <div class="steps">
+      <div class="step"><span class="n">01</span><div><strong>Create an account</strong><p>One email, one password. Sign up first — connecting an AI needs your account to exist.</p></div></div>
+      <div class="step"><span class="n">02</span><div><strong>Connect your AI</strong><p>Claude, Claude Code, opencode, or any MCP client. Takes one URL or one command.</p></div></div>
+      <div class="step"><span class="n">03</span><div><strong>Just talk</strong><p>“log this: shipped the project today.” Saved in your own words, timestamped, tagged. Read it back here anytime.</p></div></div>
+    </div>
+  </section>
+
+  <section id="connect">
+    <h2>connect anywhere</h2>
+    <div class="providers">
+      <div class="provider">
+        <div class="head"><span class="name">Claude — web, mobile, desktop</span><span class="badge">OAuth · no token</span></div>
+        <p>Settings → Connectors → Add custom connector → paste <code class="mcp-url">…/mcp</code>. Leave client id &amp; secret <strong>empty</strong> — registration is automatic. Log in with your journal account when redirected.</p>
+      </div>
+      <div class="provider">
+        <div class="head"><span class="name">Claude Code</span><span class="badge">bearer token</span></div>
+        <p>One command: <code>claude mcp add --transport http journal &lt;url&gt; --header "Authorization: Bearer &lt;token&gt;"</code></p>
+      </div>
+      <div class="provider">
+        <div class="head"><span class="name">opencode</span><span class="badge">bearer token</span></div>
+        <p>Five lines in <code>~/.config/opencode/opencode.json</code> — the exact snippet is in Connections after you sign up.</p>
+      </div>
+      <div class="provider">
+        <div class="head"><span class="name">Anything else</span><span class="badge">OAuth or token</span></div>
+        <p>Standard MCP over HTTP. OAuth-capable clients discover it from the URL alone; others send a bearer header. Local LLMs work too — LM Studio, Goose, any MCP client.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="good-to-know">
+    <h2>good to know</h2>
+    <ul class="notes">
+      <li><strong>Sign up before authorizing.</strong> The Claude login page checks your journal account.</li>
+      <li><strong>Tokens are shown once.</strong> They're stored hashed. Lost one? Rotate it in Connections — old token dies instantly, Claude's OAuth link is unaffected.</li>
+      <li><strong>Login is rate-limited.</strong> A few wrong passwords per minute — wait 60s if you hit the wall.</li>
+      <li><strong>Your entries are yours.</strong> Scoped to your account, invisible to other users. Passwords and tokens never stored in plaintext.</li>
+      <li><strong>Deleting asks first.</strong> Agents are instructed to confirm before any delete.</li>
+    </ul>
+  </section>
+
+  <section id="tools">
+    <h2>what your agent can do</h2>
+    <div class="tools">
+      <span>log entries</span><span>backdate</span><span>tag</span><span>search</span><span>date ranges</span><span>weekly review</span><span>random memory</span><span>stats &amp; streaks</span><span>edit</span><span>delete (asks first)</span>
+    </div>
+    <p class="tools-note">Plus three built-in prompts your client can surface: <span class="mono">log_today</span>, <span class="mono">weekly_review</span>, <span class="mono">remember_this</span>.</p>
+  </section>
+
+  <section class="cta">
+    <a class="pill" href="/">START YOUR JOURNAL</a>
+  </section>
+
+  <footer>Building at 🇮🇳 with ♥</footer>
+
+  <script>
+    for (const el of document.querySelectorAll(".mcp-url")) el.textContent = location.origin + "/mcp";
+  </script>
+</body>
+</html>

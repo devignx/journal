@@ -7,6 +7,30 @@ import * as store from "./db.js";
 
 const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
+// Injected into the agent's context at connector load — the "skill file".
+// Teaches any MCP client what this journal is for and how to use it well.
+const INSTRUCTIONS = `This is the user's personal journal — a long-term record of their life, written by talking to you. Treat it as their legacy, not an app.
+
+## When to log
+Log proactively whenever the user shares something that happened, a decision, a feeling, a milestone, or says "log this". Don't ask permission for obvious logs — just log and confirm in one short line. One event = one entry; a day recap can be one entry.
+
+## How to log
+- Preserve the user's voice: log close to their own words, first person, no corporate polish.
+- Set 'timestamp' to when the event actually happened (they may log yesterday's thing today).
+- Put their verbatim message in 'raw_source' when paraphrasing.
+- Tag consistently and sparingly (2-4 lowercase tags). Check 'list_tags' occasionally and reuse existing tags instead of inventing near-duplicates.
+
+## Making the journal useful (not just a write-only log)
+- Weekly/monthly reviews: 'get_by_date_range', then reflect back patterns — themes, mood arcs, what they kept mentioning. Offer to save the reflection as an entry tagged 'review'.
+- Resurfacing: 'get_random' for a "remember this?" moment. Great when the user seems nostalgic or stuck.
+- Continuity: before big-picture conversations, 'get_recent' or 'search_entries' for context on what's been going on in their life.
+- 'get_stats' shows streaks and volume — mention milestones (100th entry, first entry anniversary).
+
+## Boundaries
+- Never delete without explicit confirmation.
+- Never editorialize their feelings in stored entries — record what they said, not your interpretation.
+- The journal may hold sensitive content. Don't quote it into unrelated contexts unless the user asks.`;
+
 const TOOLS = [
   {
     name: "add_entry",
@@ -164,6 +188,26 @@ const TOOLS = [
   },
 ];
 
+// Prompt templates surfaced in the client's UI (claude.ai shows these in the
+// connector menu). Each returns messages that kick off a specific ritual.
+const PROMPTS = [
+  {
+    name: "log_today",
+    description: "Quick end-of-day logging: tell me about your day, I'll journal it",
+    text: "I want to log my day. Ask me 2-3 short questions to draw out what happened today (events, feelings, decisions, anything worth remembering), then save it to my journal in my own words with sensible tags. Keep it quick — this is a daily ritual, not an interview.",
+  },
+  {
+    name: "weekly_review",
+    description: "Read the last 7 days of entries and reflect back patterns",
+    text: "Run my weekly review. Fetch my journal entries from the last 7 days (get_by_date_range), then reflect back: recurring themes, mood arc, things I said I'd do, anything I seemed excited or worried about. End by offering to save the reflection as an entry tagged 'review'.",
+  },
+  {
+    name: "remember_this",
+    description: "Resurface one random old entry and reflect on it",
+    text: "Pull one random entry from my journal (get_random) and show it to me with its date. Then briefly reflect: what was going on then, how it might connect to now. If it sparks something, offer to log a follow-up entry linking back to it.",
+  },
+];
+
 function rpcResult(id, result) {
   return { jsonrpc: "2.0", id, result };
 }
@@ -184,12 +228,25 @@ async function handleMessage(DB, userId, msg) {
       const version = PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[1];
       return rpcResult(id, {
         protocolVersion: version,
-        capabilities: { tools: {} },
-        serverInfo: { name: "journal", version: "2.0.0" },
+        capabilities: { tools: {}, prompts: {} },
+        serverInfo: { name: "journal", version: "2.1.0" },
+        instructions: INSTRUCTIONS,
       });
     }
     case "ping":
       return rpcResult(id, {});
+    case "prompts/list":
+      return rpcResult(id, {
+        prompts: PROMPTS.map(({ name, description }) => ({ name, description })),
+      });
+    case "prompts/get": {
+      const prompt = PROMPTS.find((p) => p.name === params.name);
+      if (!prompt) return rpcError(id, -32602, `Unknown prompt: ${params.name}`);
+      return rpcResult(id, {
+        description: prompt.description,
+        messages: [{ role: "user", content: { type: "text", text: prompt.text } }],
+      });
+    }
     case "tools/list":
       return rpcResult(id, {
         tools: TOOLS.map(({ name, description, inputSchema }) => ({
