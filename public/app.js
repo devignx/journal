@@ -449,6 +449,15 @@ async function enterApp() {
   try {
     await enterApp();
   } catch {
-    showAuth();
+    // Not signed in. Bare "/" → send to the landing page. Only show the auth
+    // form when the visitor explicitly came to log in / sign up (?auth / ?signup),
+    // so the /home SIGN UP button doesn't bounce back into a redirect loop.
+    const params = new URLSearchParams(location.search);
+    if (params.has("auth") || params.has("signup")) {
+      if (params.has("signup")) setAuthMode("signup");
+      showAuth();
+    } else {
+      location.replace("/home");
+    }
   }
 })();
