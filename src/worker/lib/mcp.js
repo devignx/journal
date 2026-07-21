@@ -7,6 +7,18 @@ import * as store from "./db.js";
 
 const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
+// Reusable schema fragment: the optional space selector on entry tools.
+const SPACE_PROP = {
+  space: {
+    type: "string",
+    description: "Name of the space to use. Omit for the user's default space.",
+  },
+};
+
+// Resolve the space for a read tool (no auto-create — unknown name → default).
+const readSpaceId = (DB, userId, args) =>
+  store.resolveSpaceId(DB, userId, { spaceName: args.space });
+
 // Injected into the agent's context at connector load — the "skill file".
 // Teaches any MCP client what this journal is for and how to use it well.
 const INSTRUCTIONS = `This is Lapse — the user's personal journal, a long-term record of their life, written by talking to you. Treat it as their legacy, not an app.
@@ -19,6 +31,14 @@ Log proactively whenever the user shares something that happened, a decision, a 
 - Set 'timestamp' to when the event actually happened (they may log yesterday's thing today).
 - Put their verbatim message in 'raw_source' when paraphrasing.
 - Tag consistently and sparingly (2-4 lowercase tags). Check 'list_tags' occasionally and reuse existing tags instead of inventing near-duplicates.
+
+## Spaces
+Entries live in named spaces — separate areas of the user's life (e.g. Journal, Philosophy, Career, Legacy). Every entry tool takes an optional 'space' name.
+- 'list_spaces' shows what exists. Use it before assuming a space is there.
+- When the user clearly means a distinct area ("log this in my career space", "add to philosophy"), pass that 'space' name. If it doesn't exist yet, 'add_entry' creates it automatically — but prefer names the user actually said; don't invent spaces or split hairs over near-duplicates.
+- Omit 'space' for everyday logging — it goes to the default space, which is what the user sees on screen.
+- Reads ('get_recent', 'search_entries', 'get_by_date_range', 'get_stats', etc.) are scoped to one space. Omit 'space' for the default; pass a name to look inside another. A weekly review of "my career" means passing space:"Career".
+- 'create_space' and 'rename_space' let you set spaces up when the user asks. You cannot delete a space — that's done by the user in the web app.
 
 ## Making the journal useful (not just a write-only log)
 - Weekly/monthly reviews: 'get_by_date_range', then reflect back patterns — themes, mood arcs, what they kept mentioning. Offer to save the reflection as an entry tagged 'review'.
@@ -50,10 +70,17 @@ const TOOLS = [
           items: { type: "string" },
           description: "Freeform lowercase tags, e.g. ['work','health']",
         },
+        ...SPACE_PROP,
       },
       required: ["content"],
     },
-    handler: (DB, userId, args) => store.addEntry(DB, userId, args),
+    handler: async (DB, userId, args) => {
+      const spaceId = await store.resolveSpaceId(DB, userId, {
+        spaceName: args.space,
+        autoCreate: true,
+      });
+      return store.addEntry(DB, userId, spaceId, args);
+    },
   },
   {
     name: "get_entry",
@@ -93,61 +120,71 @@ const TOOLS = [
   },
   {
     name: "get_recent",
-    description: "Most recent entries, newest first.",
+    description: "Most recent entries in a space, newest first.",
     inputSchema: {
       type: "object",
       properties: {
         limit: { type: "number", description: "Default 10" },
         offset: { type: "number" },
+        ...SPACE_PROP,
       },
     },
-    handler: (DB, userId, { limit, offset }) =>
-      store.getRecent(DB, userId, limit ?? 10, offset ?? 0),
+    handler: async (DB, userId, args) =>
+      store.getRecent(DB, userId, await readSpaceId(DB, userId, args), args.limit ?? 10, args.offset ?? 0),
   },
   {
     name: "get_by_date_range",
-    description: "Entries between two ISO 8601 timestamps (inclusive).",
+    description: "Entries in a space between two ISO 8601 timestamps (inclusive).",
     inputSchema: {
       type: "object",
       properties: {
         start: { type: "string", description: "ISO 8601 start" },
         end: { type: "string", description: "ISO 8601 end" },
+        ...SPACE_PROP,
       },
       required: ["start", "end"],
     },
-    handler: (DB, userId, { start, end }) => store.getByDateRange(DB, userId, start, end),
+    handler: async (DB, userId, args) =>
+      store.getByDateRange(DB, userId, await readSpaceId(DB, userId, args), args.start, args.end),
   },
   {
     name: "search_entries",
-    description: "Full-text substring search over entry content.",
+    description: "Full-text substring search over entry content within a space.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string" },
         limit: { type: "number", description: "Default 20" },
+        ...SPACE_PROP,
       },
       required: ["query"],
     },
-    handler: (DB, userId, { query, limit }) => store.searchEntries(DB, userId, query, limit ?? 20),
+    handler: async (DB, userId, args) =>
+      store.searchEntries(DB, userId, await readSpaceId(DB, userId, args), args.query, args.limit ?? 20),
   },
   {
     name: "get_by_tag",
-    description: "Entries carrying a given tag, newest first.",
+    description: "Entries in a space carrying a given tag, newest first.",
     inputSchema: {
       type: "object",
       properties: {
         tag: { type: "string" },
         limit: { type: "number", description: "Default 50" },
+        ...SPACE_PROP,
       },
       required: ["tag"],
     },
-    handler: (DB, userId, { tag, limit }) => store.getByTag(DB, userId, tag, limit ?? 50),
+    handler: async (DB, userId, args) =>
+      store.getByTag(DB, userId, await readSpaceId(DB, userId, args), args.tag, args.limit ?? 50),
   },
   {
     name: "get_random",
-    description: "One random entry — for resurfacing old memories.",
-    inputSchema: { type: "object", properties: {} },
-    handler: async (DB, userId) => (await store.getRandom(DB, userId)) || { error: "no entries yet" },
+    description: "One random entry from a space — for resurfacing old memories.",
+    inputSchema: { type: "object", properties: { ...SPACE_PROP } },
+    handler: async (DB, userId, args) =>
+      (await store.getRandom(DB, userId, await readSpaceId(DB, userId, args))) || {
+        error: "no entries yet",
+      },
   },
   {
     name: "add_tags",
@@ -176,15 +213,46 @@ const TOOLS = [
   },
   {
     name: "list_tags",
-    description: "All tags with usage counts.",
-    inputSchema: { type: "object", properties: {} },
-    handler: (DB, userId) => store.listTags(DB, userId),
+    description: "All tags in a space with usage counts.",
+    inputSchema: { type: "object", properties: { ...SPACE_PROP } },
+    handler: async (DB, userId, args) =>
+      store.listTags(DB, userId, await readSpaceId(DB, userId, args)),
   },
   {
     name: "get_stats",
-    description: "Journal stats: totals, first/last entry, tag count, last-7-days activity.",
+    description: "Space stats: totals, first/last entry, tag count, last-7-days activity.",
+    inputSchema: { type: "object", properties: { ...SPACE_PROP } },
+    handler: async (DB, userId, args) =>
+      store.getStats(DB, userId, await readSpaceId(DB, userId, args)),
+  },
+  {
+    name: "list_spaces",
+    description:
+      "List the user's spaces (named areas that entries live in), with entry counts and which is the default.",
     inputSchema: { type: "object", properties: {} },
-    handler: (DB, userId) => store.getStats(DB, userId),
+    handler: (DB, userId) => store.listSpaces(DB, userId),
+  },
+  {
+    name: "create_space",
+    description:
+      "Create a new space. Use when the user wants a distinct area (e.g. Philosophy, Career, Legacy). Returns the existing space if the name is already taken.",
+    inputSchema: {
+      type: "object",
+      properties: { name: { type: "string", description: "Space name, e.g. 'Career'" } },
+      required: ["name"],
+    },
+    handler: (DB, userId, { name }) => store.createSpace(DB, userId, name),
+  },
+  {
+    name: "rename_space",
+    description: "Rename a space by its id (get the id from list_spaces).",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "number" }, name: { type: "string" } },
+      required: ["id", "name"],
+    },
+    handler: async (DB, userId, { id, name }) =>
+      (await store.renameSpace(DB, userId, id, name)) || { error: "not found" },
   },
 ];
 

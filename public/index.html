@@ -59,13 +59,22 @@
   <section id="app" class="app hidden">
     <header>
       <div class="brand">
-        <svg viewBox="0 0 62 60" fill="none" aria-hidden="true">
+        <svg class="brand-logo" viewBox="0 0 62 60" fill="none" aria-hidden="true">
           <path
             d="M44.0724 16.1665C48.8695 11.3694 56.9546 11.3672 59.4736 17.6663C60.1656 19.3967 60.7 21.1954 61.0656 23.0413C62.2335 28.9383 61.6258 35.0524 59.3195 40.6104C57.0131 46.1683 53.1117 50.9206 48.1085 54.2661C43.1053 57.6116 37.2251 59.4002 31.2114 59.4056C25.1977 59.4111 19.3207 57.6331 14.3236 54.2966C9.32643 50.9601 5.43356 46.2149 3.13725 40.6611C0.840947 35.1073 0.244337 28.9943 1.42287 23.0951C1.79308 21.242 2.33324 19.4362 3.03196 17.6988C5.56333 11.4047 13.6471 11.4083 18.4442 16.2054L22.5529 20.3141C27.35 25.1112 35.1277 25.1112 39.9248 20.3141L44.0724 16.1665Z"
             fill="url(#logo-body)" />
           <circle cx="31" cy="9" r="9" fill="url(#logo-dot)" />
         </svg>
-        <h1>Lapse</h1>
+        <div class="space-switcher" id="space-switcher">
+          <button class="space-trigger" id="space-trigger" aria-haspopup="menu" aria-expanded="false">
+            <span id="active-space-name">Journal</span>
+            <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div class="space-menu" role="menu" id="space-menu"></div>
+        </div>
       </div>
       <div class="account" id="account">
         <button class="account-trigger" id="account-trigger" aria-haspopup="menu" aria-expanded="false"

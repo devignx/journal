@@ -12,6 +12,14 @@ const state = {
   me: null,
   freshToken: null, // MCP token, present only right after signup/rotation
   provider: "claude",
+  spaces: [], // [{id,name,is_default,entry_count}]
+  activeSpaceId: null,
+};
+
+// Scope a read to the active space.
+const withSpace = (params) => {
+  if (state.activeSpaceId != null) params.set("space", state.activeSpaceId);
+  return params;
 };
 
 async function api(path, opts = {}) {
@@ -82,9 +90,13 @@ $("account-trigger").addEventListener("click", (e) => {
 document.addEventListener("click", () => {
   account.classList.remove("open");
   $("account-trigger").setAttribute("aria-expanded", "false");
+  closeSpaceMenu();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") account.classList.remove("open");
+  if (e.key === "Escape") {
+    account.classList.remove("open");
+    closeSpaceMenu();
+  }
 });
 
 $("menu-settings").addEventListener("click", () => {
@@ -223,7 +235,7 @@ function renderCount() {
 
 async function loadEntries({ append = false } = {}) {
   const q = $("search").value.trim();
-  const params = new URLSearchParams({ limit: state.limit });
+  const params = withSpace(new URLSearchParams({ limit: state.limit }));
   if (q) params.set("q", q);
   else if (state.activeTag) params.set("tag", state.activeTag);
   else if (append) params.set("offset", state.offset);
@@ -240,7 +252,7 @@ async function loadEntries({ append = false } = {}) {
 }
 
 async function loadTags() {
-  const tags = await api("/api/tags");
+  const tags = await api(`/api/tags?${withSpace(new URLSearchParams())}`);
   const select = $("tag-filter");
   const current = state.activeTag;
   select.innerHTML = `<option value="">all tags</option>`;
@@ -254,10 +266,150 @@ async function loadTags() {
 }
 
 async function loadStats() {
-  const s = await api("/api/stats");
+  const s = await api(`/api/stats?${withSpace(new URLSearchParams())}`);
   state.totalEntries = s.total_entries;
   renderCount();
 }
+
+// ---------- spaces ----------
+
+function activeSpaceStorageKey() {
+  return `lapse_active_space_${state.me?.email || ""}`;
+}
+
+async function loadSpaces() {
+  state.spaces = await api("/api/spaces");
+  const stored = Number(localStorage.getItem(activeSpaceStorageKey()));
+  const exists = state.spaces.some((s) => s.id === stored);
+  const fallback = (state.spaces.find((s) => s.is_default) || state.spaces[0]);
+  state.activeSpaceId = exists ? stored : fallback ? fallback.id : null;
+  renderSpaceSwitcher();
+}
+
+function activeSpace() {
+  return state.spaces.find((s) => s.id === state.activeSpaceId);
+}
+
+function renderSpaceSwitcher() {
+  const s = activeSpace();
+  $("active-space-name").textContent = s ? s.name : "Journal";
+
+  const menu = $("space-menu");
+  menu.innerHTML = "";
+
+  for (const space of state.spaces) {
+    const row = document.createElement("div");
+    row.className = "space-row" + (space.id === state.activeSpaceId ? " active" : "");
+
+    const pick = document.createElement("button");
+    pick.className = "space-pick";
+    pick.setAttribute("role", "menuitem");
+    pick.innerHTML = `<span class="space-check">${space.id === state.activeSpaceId ? "✓" : ""}</span>
+      <span class="space-label">${esc(space.name)}</span>
+      <span class="space-count">${space.entry_count}</span>`;
+    pick.addEventListener("click", () => switchSpace(space.id));
+    row.append(pick);
+
+    if (!space.is_default) {
+      const del = document.createElement("button");
+      del.className = "space-del";
+      del.title = "Delete space";
+      del.setAttribute("aria-label", `Delete ${space.name}`);
+      del.textContent = "✕";
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteSpace(space);
+      });
+      row.append(del);
+    }
+    menu.append(row);
+  }
+
+  const create = document.createElement("button");
+  create.className = "space-create";
+  create.setAttribute("role", "menuitem");
+  create.innerHTML = `<span class="space-plus">+</span> New space`;
+  create.addEventListener("click", startCreateSpace);
+  menu.append(create);
+}
+
+function startCreateSpace() {
+  const menu = $("space-menu");
+  const wrap = document.createElement("form");
+  wrap.className = "space-create-form";
+  wrap.innerHTML = `<input type="text" placeholder="space name" maxlength="40" autocomplete="off" />`;
+  const input = wrap.querySelector("input");
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      wrap.requestSubmit();
+    }
+  });
+  wrap.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+      const space = await api("/api/spaces", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      await loadSpaces();
+      switchSpace(space.id);
+    } catch (err) {
+      input.value = "";
+      input.placeholder = err.message === "name_taken" ? "name already used" : "couldn't create";
+    }
+  });
+  menu.replaceChild(wrap, menu.querySelector(".space-create"));
+  input.focus();
+}
+
+async function switchSpace(id) {
+  state.activeSpaceId = id;
+  localStorage.setItem(activeSpaceStorageKey(), String(id));
+  closeSpaceMenu();
+  state.activeTag = "";
+  $("search").value = "";
+  $("tag-filter").value = "";
+  renderSpaceSwitcher();
+  await Promise.all([loadStats(), loadTags()]);
+  await loadEntries();
+}
+
+async function deleteSpace(space) {
+  if (
+    !confirm(
+      `Delete “${space.name}” and its ${space.entry_count} ${
+        space.entry_count === 1 ? "entry" : "entries"
+      }? This can't be undone.`
+    )
+  )
+    return;
+  await api(`/api/spaces/${space.id}`, { method: "DELETE" });
+  const wasActive = state.activeSpaceId === space.id;
+  await loadSpaces();
+  if (wasActive) {
+    await switchSpace(state.activeSpaceId);
+  } else {
+    renderSpaceSwitcher();
+  }
+}
+
+function closeSpaceMenu() {
+  $("space-switcher").classList.remove("open");
+  $("space-trigger").setAttribute("aria-expanded", "false");
+}
+
+$("space-trigger").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = $("space-switcher").classList.toggle("open");
+  $("space-trigger").setAttribute("aria-expanded", open);
+  if (open) renderSpaceSwitcher();
+});
+// Clicks inside the menu (switch, delete, create form) shouldn't reach the
+// document handler that closes it — closing is done explicitly where needed.
+$("space-menu").addEventListener("click", (e) => e.stopPropagation());
 
 // ---------- toolbar ----------
 
@@ -441,6 +593,7 @@ async function enterApp() {
   $("app").classList.remove("hidden");
   $("avatar").textContent = state.me.email[0];
   $("account-email").textContent = state.me.email;
+  await loadSpaces(); // sets active space before any scoped read
   await Promise.all([loadStats(), loadTags()]);
   await loadEntries();
 }

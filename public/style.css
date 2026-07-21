@@ -101,9 +101,105 @@ header {
   gap: 1rem;
   margin-bottom: 1.75rem;
 }
-.brand { display: flex; align-items: center; gap: 0.6rem; }
-.brand svg { width: 26px; height: 26px; }
+.brand { display: flex; align-items: center; gap: 0.55rem; }
+.brand-logo { width: 26px; height: 26px; flex: none; }
 header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---------- space switcher ---------- */
+.space-switcher { position: relative; }
+.space-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-color: transparent;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.space-trigger:hover { border-color: var(--line); }
+.space-switcher.open .chevron { transform: rotate(180deg); }
+
+.space-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 230px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.4rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  display: none;
+  z-index: 20;
+}
+.space-switcher.open .space-menu { display: block; }
+
+.space-row { display: flex; align-items: stretch; border-radius: 6px; }
+.space-row:hover { background: var(--bg); }
+.space-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.92rem;
+  font-weight: 400;
+  text-align: left;
+}
+.space-check { width: 0.9rem; color: var(--violet); flex: none; font-size: 0.85rem; }
+.space-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.space-row.active .space-label { font-weight: 600; }
+.space-count {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  flex: none;
+}
+.space-del {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  padding: 0 0.6rem;
+  opacity: 0;
+  flex: none;
+}
+.space-row:hover .space-del { opacity: 1; }
+.space-del:hover { color: var(--error); }
+
+.space-create,
+.space-create-form {
+  margin-top: 0.3rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.45rem;
+}
+.space-create {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-align: left;
+}
+.space-create:hover { background: var(--bg); color: var(--fg); }
+.space-plus { width: 0.9rem; color: var(--violet); font-weight: 600; }
+.space-create-form input {
+  width: 100%;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.6rem;
+  margin-top: 0.45rem;
+}
 
 /* ---------- account dropdown ---------- */
 .account { position: relative; }

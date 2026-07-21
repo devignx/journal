@@ -145,6 +145,42 @@ export default {
         return json({ mcp_token: token }); // shown once; old token dead
       }
 
+      // ----- spaces -----
+      if (pathname === "/api/spaces" && method === "GET") {
+        return json(await store.listSpaces(env.DB, user.id));
+      }
+      if (pathname === "/api/spaces" && method === "POST") {
+        const { name } = await request.json().catch(() => ({}));
+        if (!name || !String(name).trim()) return json({ error: "name_required" }, 400);
+        try {
+          return json(await store.createSpace(env.DB, user.id, name));
+        } catch (err) {
+          if (String(err).includes("UNIQUE")) return json({ error: "name_taken" }, 409);
+          throw err;
+        }
+      }
+      const spaceMatch = pathname.match(/^\/api\/spaces\/(\d+)$/);
+      if (spaceMatch) {
+        const spaceId = Number(spaceMatch[1]);
+        if (method === "PATCH") {
+          const { name } = await request.json().catch(() => ({}));
+          if (!name || !String(name).trim()) return json({ error: "name_required" }, 400);
+          const renamed = await store.renameSpace(env.DB, user.id, spaceId, name);
+          return renamed ? json(renamed) : json({ error: "not_found" }, 404);
+        }
+        if (method === "DELETE") {
+          const res = await store.deleteSpace(env.DB, user.id, spaceId);
+          if (res.ok) return json({ ok: true });
+          return json({ error: res.reason }, res.reason === "not_found" ? 404 : 400);
+        }
+      }
+
+      // Resolve the space for entry/tag/stat reads: ?space=<id>, else default.
+      const spaceParam = url.searchParams.get("space");
+      const spaceId = await store.resolveSpaceId(env.DB, user.id, {
+        spaceId: spaceParam ? Number(spaceParam) : null,
+      });
+
       if (pathname === "/api/entries" && method === "GET") {
         const q = url.searchParams.get("q");
         const tag = url.searchParams.get("tag");
@@ -153,10 +189,11 @@ export default {
         const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 200);
         const offset = Number(url.searchParams.get("offset")) || 0;
         let entries;
-        if (q) entries = await store.searchEntries(env.DB, user.id, q, limit);
-        else if (tag) entries = await store.getByTag(env.DB, user.id, tag, limit);
-        else if (start && end) entries = await store.getByDateRange(env.DB, user.id, start, end);
-        else entries = await store.getRecent(env.DB, user.id, limit, offset);
+        if (q) entries = await store.searchEntries(env.DB, user.id, spaceId, q, limit);
+        else if (tag) entries = await store.getByTag(env.DB, user.id, spaceId, tag, limit);
+        else if (start && end)
+          entries = await store.getByDateRange(env.DB, user.id, spaceId, start, end);
+        else entries = await store.getRecent(env.DB, user.id, spaceId, limit, offset);
         return json(entries);
       }
 
@@ -167,11 +204,11 @@ export default {
       }
 
       if (pathname === "/api/tags" && method === "GET") {
-        return json(await store.listTags(env.DB, user.id));
+        return json(await store.listTags(env.DB, user.id, spaceId));
       }
 
       if (pathname === "/api/stats" && method === "GET") {
-        return json(await store.getStats(env.DB, user.id));
+        return json(await store.getStats(env.DB, user.id, spaceId));
       }
 
       return json({ error: "not_found" }, 404);
