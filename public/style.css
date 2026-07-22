@@ -309,6 +309,18 @@ header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
 #sort-toggle { color: var(--muted); white-space: nowrap; }
 #search { width: 180px; }
 
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.55rem;
+  color: var(--muted);
+}
+.icon-btn:hover { color: var(--fg); border-color: var(--muted); }
+.icon-btn svg { display: block; }
+.icon-btn.spinning svg { animation: spin 0.5s linear; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ---------- date groups ---------- */
 .group { border-top: 1px solid var(--line); }
 .group-head {

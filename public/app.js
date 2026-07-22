@@ -434,6 +434,18 @@ $("sort-toggle").addEventListener("click", () => {
 
 $("load-more").addEventListener("click", () => loadEntries({ append: true }));
 
+$("refresh-btn").addEventListener("click", async () => {
+  const btn = $("refresh-btn");
+  btn.classList.add("spinning");
+  try {
+    await loadSpaces(); // refresh space list + entry counts
+    await Promise.all([loadStats(), loadTags()]);
+    await loadEntries(); // keeps current space, tag, search, sort
+  } finally {
+    setTimeout(() => btn.classList.remove("spinning"), 500);
+  }
+});
+
 $("empty-connect").addEventListener("click", (e) => {
   e.preventDefault();
   openSettings();
