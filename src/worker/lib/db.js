@@ -102,9 +102,11 @@ export async function listSpaces(DB, userId) {
   return results.map((s) => ({ ...s, is_default: !!s.is_default }));
 }
 
+// Always resolves to a space when the user has any — the flagged default,
+// else the oldest. So "default" is just the fallback bucket, not a special row.
 export async function getDefaultSpaceId(DB, userId) {
   const row = await DB.prepare(
-    "SELECT id FROM spaces WHERE user_id = ? AND is_default = 1 LIMIT 1"
+    "SELECT id FROM spaces WHERE user_id = ? ORDER BY is_default DESC, id ASC LIMIT 1"
   )
     .bind(userId)
     .first();
@@ -148,11 +150,16 @@ export async function renameSpace(DB, userId, id, name) {
   return getSpaceById(DB, userId, id);
 }
 
-// Deletes the space and everything in it. Refuses the default/last space.
+// Deletes the space and everything in it. Any space can go except the last one
+// (the user must always have somewhere to log). Deleting the default promotes
+// the next space to default.
 export async function deleteSpace(DB, userId, id) {
   const space = await getSpaceById(DB, userId, id);
   if (!space) return { ok: false, reason: "not_found" };
-  if (space.is_default) return { ok: false, reason: "is_default" };
+  const total = (
+    await DB.prepare("SELECT COUNT(*) AS n FROM spaces WHERE user_id = ?").bind(userId).first()
+  ).n;
+  if (total <= 1) return { ok: false, reason: "last_space" };
   await DB.batch([
     DB.prepare(
       "DELETE FROM tags WHERE entry_id IN (SELECT id FROM entries WHERE space_id = ? AND user_id = ?)"
@@ -160,6 +167,14 @@ export async function deleteSpace(DB, userId, id) {
     DB.prepare("DELETE FROM entries WHERE space_id = ? AND user_id = ?").bind(id, userId),
     DB.prepare("DELETE FROM spaces WHERE id = ? AND user_id = ?").bind(id, userId),
   ]);
+  if (space.is_default) {
+    const next = await DB.prepare(
+      "SELECT id FROM spaces WHERE user_id = ? ORDER BY id ASC LIMIT 1"
+    )
+      .bind(userId)
+      .first();
+    if (next) await DB.prepare("UPDATE spaces SET is_default = 1 WHERE id = ?").bind(next.id).run();
+  }
   return { ok: true };
 }
 
@@ -285,7 +300,20 @@ export async function getRecent(DB, userId, spaceId, limit = 10, offset = 0) {
 }
 
 // All entries across every space, newest first, each carrying its space name.
-export async function getRecentAll(DB, userId, limit = 50, offset = 0) {
+// Optional tag filter (used by the graph "open entries" link).
+export async function getRecentAll(DB, userId, limit = 50, offset = 0, tag = null) {
+  if (tag) {
+    const { results } = await DB.prepare(
+      `SELECT e.*, s.name AS space FROM entries e
+       JOIN spaces s ON s.id = e.space_id
+       JOIN tags t ON t.entry_id = e.id
+       WHERE e.user_id = ? AND t.tag = ?
+       ORDER BY e.timestamp DESC LIMIT ? OFFSET ?`
+    )
+      .bind(userId, String(tag).trim().toLowerCase(), limit, offset)
+      .all();
+    return attachTagsAll(DB, results);
+  }
   const { results } = await DB.prepare(
     `SELECT e.*, s.name AS space FROM entries e JOIN spaces s ON s.id = e.space_id
      WHERE e.user_id = ? ORDER BY e.timestamp DESC LIMIT ? OFFSET ?`

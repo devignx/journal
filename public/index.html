@@ -93,12 +93,6 @@
         </button>
         <div class="account-menu" role="menu">
           <p class="account-email muted mono" id="account-email"></p>
-          <button role="menuitem" id="menu-all">
-            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-            </svg>
-            All entries
-          </button>
           <button role="menuitem" id="menu-graph">
             <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
               <circle cx="4" cy="4" r="2" fill="none" stroke="currentColor" stroke-width="1.2" />
@@ -167,8 +161,17 @@
     <!-- graph view -->
     <section id="graph-view" class="graph-view hidden">
       <div class="graph-bar">
-        <span class="graph-title mono">graph · <span id="graph-scope">all spaces</span></span>
-        <div class="graph-spaces" id="graph-spaces"></div>
+        <button id="graph-back" class="graph-back">← back</button>
+        <div class="gspace-select" id="gspace-select">
+          <button id="gspace-trigger" class="gspace-trigger" aria-haspopup="menu" aria-expanded="false">
+            <span id="graph-scope">all spaces</span>
+            <svg class="chevron" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div class="gspace-menu" id="gspace-menu" role="menu"></div>
+        </div>
         <button id="graph-reset" class="icon-btn" title="Reset view">reset</button>
       </div>
       <div class="graph-stage">

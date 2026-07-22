@@ -221,7 +221,7 @@ export default {
         const offset = Number(url.searchParams.get("offset")) || 0;
         let entries;
         if (url.searchParams.get("space") === "all")
-          entries = await store.getRecentAll(env.DB, user.id, limit, offset);
+          entries = await store.getRecentAll(env.DB, user.id, limit, offset, tag);
         else if (q) entries = await store.searchEntries(env.DB, user.id, spaceId, q, limit);
         else if (tag) entries = await store.getByTag(env.DB, user.id, spaceId, tag, limit);
         else if (start && end)

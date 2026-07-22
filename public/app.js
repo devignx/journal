@@ -14,7 +14,7 @@ const state = {
   provider: "claude",
   spaces: [], // [{id,name,is_default,entry_count}]
   activeSpaceId: null,
-  view: "feed", // "feed" | "all" | "graph"
+  view: "all", // "feed" | "all" | "graph" — All is the default landing view
   graphSpaces: null, // Set of space ids to include, or null = all
 };
 
@@ -104,16 +104,18 @@ $("menu-settings").addEventListener("click", () => {
   openSettings();
 });
 
-$("menu-all").addEventListener("click", () => {
-  account.classList.remove("open");
-  setView("all");
-});
 $("menu-graph").addEventListener("click", () => {
   account.classList.remove("open");
   setView("graph");
 });
 $("menu-guide").addEventListener("click", () => {
   location.href = "/guide";
+});
+
+// logo = home (All lapses)
+document.querySelector(".brand-logo").addEventListener("click", () => {
+  state.activeTag = "";
+  setView("all");
 });
 
 $("menu-logout").addEventListener("click", async () => {
@@ -139,10 +141,15 @@ async function setView(view) {
   $("search").classList.toggle("hidden", !isFeed);
   $("sort-toggle").classList.toggle("hidden", !isFeed);
 
+  renderSpaceSwitcher(); // reflect All-vs-space label + active row
+
   if (isGraph) {
     await loadGraph();
-  } else {
+  } else if (isFeed) {
+    await Promise.all([loadStats(), loadTags()]);
     await loadEntries();
+  } else {
+    await loadEntries(); // all view
   }
 }
 
@@ -218,11 +225,15 @@ function renderEntry(entry) {
   actions.className = "entry-actions";
   const editBtn = document.createElement("button");
   editBtn.className = "entry-act";
-  editBtn.textContent = "edit";
+  editBtn.title = "Edit";
+  editBtn.setAttribute("aria-label", "Edit entry");
+  editBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3M2.5 13.5l.6-2.6 7.4-7.4 2 2-7.4 7.4-2.6.6z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
   editBtn.addEventListener("click", () => startEditEntry(el, entry));
   const delBtn = document.createElement("button");
   delBtn.className = "entry-act danger";
-  delBtn.textContent = "delete";
+  delBtn.title = "Delete";
+  delBtn.setAttribute("aria-label", "Delete entry");
+  delBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   delBtn.addEventListener("click", () => deleteEntryWeb(entry));
   actions.append(editBtn, delBtn);
   meta.append(actions);
@@ -360,7 +371,21 @@ function renderFeed() {
 
 function renderCount() {
   if (state.view === "all") {
-    $("entry-count").textContent = `${state.entries.length} shown · all spaces`;
+    const el = $("entry-count");
+    if (state.activeTag) {
+      el.innerHTML = `${state.entries.length} tagged <strong>${esc(state.activeTag)}</strong> `;
+      const clear = document.createElement("button");
+      clear.className = "tag-clear";
+      clear.textContent = "✕";
+      clear.title = "Clear filter";
+      clear.addEventListener("click", () => {
+        state.activeTag = "";
+        loadEntries();
+      });
+      el.append(clear);
+    } else {
+      el.textContent = `${state.entries.length} shown · all spaces`;
+    }
     return;
   }
   const q = $("search").value.trim();
@@ -377,6 +402,7 @@ async function loadEntries({ append = false } = {}) {
   let params;
   if (state.view === "all") {
     params = new URLSearchParams({ limit: state.limit, space: "all" });
+    if (state.activeTag) params.set("tag", state.activeTag);
     if (append) params.set("offset", state.offset);
   } else {
     const q = $("search").value.trim();
@@ -438,36 +464,57 @@ function activeSpace() {
 
 function renderSpaceSwitcher() {
   const s = activeSpace();
-  $("active-space-name").textContent = s ? s.name : "Journal";
+  $("active-space-name").textContent = state.view === "all" ? "All lapses" : s ? s.name : "Journal";
 
   const menu = $("space-menu");
   menu.innerHTML = "";
 
+  // "All lapses" — cross-space view, the default
+  const allRow = document.createElement("div");
+  allRow.className = "space-row" + (state.view === "all" ? " active" : "");
+  const allPick = document.createElement("button");
+  allPick.className = "space-pick";
+  allPick.setAttribute("role", "menuitem");
+  const totalAll = state.spaces.reduce((n, sp) => n + sp.entry_count, 0);
+  allPick.innerHTML = `<span class="space-check">${state.view === "all" ? "✓" : ""}</span>
+    <span class="space-label">All lapses</span>
+    <span class="space-count">${totalAll}</span>`;
+  allPick.addEventListener("click", () => {
+    closeSpaceMenu();
+    state.activeTag = "";
+    setView("all");
+  });
+  allRow.append(allPick);
+  menu.append(allRow);
+
+  const sep = document.createElement("div");
+  sep.className = "space-sep";
+  menu.append(sep);
+
   for (const space of state.spaces) {
+    const isActive = state.view === "feed" && space.id === state.activeSpaceId;
     const row = document.createElement("div");
-    row.className = "space-row" + (space.id === state.activeSpaceId ? " active" : "");
+    row.className = "space-row" + (isActive ? " active" : "");
 
     const pick = document.createElement("button");
     pick.className = "space-pick";
     pick.setAttribute("role", "menuitem");
-    pick.innerHTML = `<span class="space-check">${space.id === state.activeSpaceId ? "✓" : ""}</span>
+    pick.innerHTML = `<span class="space-check">${isActive ? "✓" : ""}</span>
       <span class="space-label">${esc(space.name)}</span>
       <span class="space-count">${space.entry_count}</span>`;
     pick.addEventListener("click", () => switchSpace(space.id));
     row.append(pick);
 
-    if (!space.is_default) {
-      const del = document.createElement("button");
-      del.className = "space-del";
-      del.title = "Delete space";
-      del.setAttribute("aria-label", `Delete ${space.name}`);
-      del.textContent = "✕";
-      del.addEventListener("click", (e) => {
-        e.stopPropagation();
-        deleteSpace(space);
-      });
-      row.append(del);
-    }
+    const del = document.createElement("button");
+    del.className = "space-del";
+    del.title = "Delete space";
+    del.setAttribute("aria-label", `Delete ${space.name}`);
+    del.textContent = "✕";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteSpace(space);
+    });
+    row.append(del);
     menu.append(row);
   }
 
@@ -537,14 +584,19 @@ async function deleteSpace(space) {
     )
   )
     return;
-  await api(`/api/spaces/${space.id}`, { method: "DELETE" });
+  try {
+    await api(`/api/spaces/${space.id}`, { method: "DELETE" });
+  } catch (err) {
+    if (err.message === "last_space") alert("Can't delete your only space — create another first.");
+    return;
+  }
   const wasActive = state.activeSpaceId === space.id;
   await loadSpaces();
   if (wasActive) {
-    await switchSpace(state.activeSpaceId);
-  } else {
-    renderSpaceSwitcher();
+    state.activeSpaceId = state.spaces[0]?.id ?? null;
   }
+  // stay in whatever view we're in; just refresh
+  state.view === "feed" ? await switchSpace(state.activeSpaceId) : await setView(state.view);
 }
 
 function closeSpaceMenu() {
@@ -858,25 +910,67 @@ function tagLabel(tag) {
   return i > 0 ? tag.slice(i + 1) : tag;
 }
 
+function graphScopeLabel() {
+  if (state.graphSpaces === null) return "all spaces";
+  const n = state.graphSpaces.size;
+  if (n === 0) return "no spaces";
+  if (n === 1) {
+    const id = [...state.graphSpaces][0];
+    return state.spaces.find((s) => s.id === id)?.name || "1 space";
+  }
+  return `${n} spaces`;
+}
+
 function renderGraphSpaces() {
-  const bar = $("graph-spaces");
-  bar.innerHTML = "";
-  for (const s of state.spaces) {
-    const on = state.graphSpaces === null || state.graphSpaces.has(s.id);
-    const btn = document.createElement("button");
-    btn.className = "gspace" + (on ? " on" : "");
-    btn.textContent = s.name;
-    btn.addEventListener("click", () => {
-      if (state.graphSpaces === null) state.graphSpaces = new Set(state.spaces.map((x) => x.id));
-      on ? state.graphSpaces.delete(s.id) : state.graphSpaces.add(s.id);
-      if (state.graphSpaces.size === state.spaces.length) state.graphSpaces = null;
-      const scope = state.graphSpaces === null ? "all spaces" : `${state.graphSpaces.size} space${state.graphSpaces.size === 1 ? "" : "s"}`;
-      $("graph-scope").textContent = scope;
+  $("graph-scope").textContent = graphScopeLabel();
+  const menu = $("gspace-menu");
+  menu.innerHTML = "";
+
+  const mkItem = (label, on, onClick) => {
+    const item = document.createElement("button");
+    item.className = "gspace-item";
+    item.setAttribute("role", "menuitemcheckbox");
+    item.setAttribute("aria-checked", on);
+    item.innerHTML = `<span class="gcheck">${on ? "✓" : ""}</span> <span>${esc(label)}</span>`;
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onClick();
+      renderGraphSpaces();
       loadGraph();
     });
-    bar.append(btn);
+    return item;
+  };
+
+  menu.append(
+    mkItem("All spaces", state.graphSpaces === null, () => {
+      state.graphSpaces = null;
+    })
+  );
+  const sep = document.createElement("div");
+  sep.className = "gspace-sep";
+  menu.append(sep);
+
+  for (const s of state.spaces) {
+    const on = state.graphSpaces === null || state.graphSpaces.has(s.id);
+    menu.append(
+      mkItem(s.name, on, () => {
+        if (state.graphSpaces === null) state.graphSpaces = new Set(state.spaces.map((x) => x.id));
+        on ? state.graphSpaces.delete(s.id) : state.graphSpaces.add(s.id);
+        if (state.graphSpaces.size === state.spaces.length) state.graphSpaces = null;
+      })
+    );
   }
 }
+
+$("gspace-trigger").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = $("gspace-select").classList.toggle("open");
+  $("gspace-trigger").setAttribute("aria-expanded", open);
+});
+$("gspace-menu").addEventListener("click", (e) => e.stopPropagation());
+document.addEventListener("click", () => $("gspace-select").classList.remove("open"));
+
+$("graph-back").addEventListener("click", () => setView("all"));
 
 async function loadGraph() {
   renderGraphSpaces();
@@ -1105,10 +1199,13 @@ function updateGraphTip(n) {
   const tip = $("graph-tip");
   if (!n) {
     tip.classList.add("hidden");
+    tip.innerHTML = "";
     return;
   }
   const deg = graph.edges.filter((e) => e.a === n || e.b === n).length;
-  tip.innerHTML = `<strong>${esc(n.tag)}</strong> · ${n.count} ${n.count === 1 ? "entry" : "entries"} · ${deg} link${deg === 1 ? "" : "s"}`;
+  tip.innerHTML =
+    `<strong>${esc(n.tag)}</strong> · ${n.count} ${n.count === 1 ? "entry" : "entries"} · ${deg} link${deg === 1 ? "" : "s"} · ` +
+    `<a href="/?tag=${encodeURIComponent(n.tag)}" target="_blank" rel="noopener">open entries →</a>`;
   tip.classList.remove("hidden");
 }
 
@@ -1125,16 +1222,19 @@ $("graph-reset").addEventListener("click", () => {
 
 async function enterApp() {
   state.me = await api("/api/me");
-  // Drop any ?auth / ?signup / ?magic param once we're in — it's stale now.
+  // ?tag=X (e.g. from a graph node link) → land on All, filtered by that tag.
+  const bootParams = new URLSearchParams(location.search);
+  const tagParam = bootParams.get("tag");
+  // Drop any ?auth / ?signup / ?magic / ?tag param once consumed.
   if (location.search) history.replaceState(null, "", location.pathname);
   $("auth").classList.add("hidden");
   $("app").classList.remove("hidden");
   $("avatar").textContent = state.me.email[0];
   $("account-email").textContent = state.me.email;
   initGraphCanvas();
-  await loadSpaces(); // sets active space before any scoped read
-  await Promise.all([loadStats(), loadTags()]);
-  await loadEntries();
+  await loadSpaces(); // loads spaces before any scoped read
+  if (tagParam) state.activeTag = tagParam;
+  await setView("all"); // All is the default landing view
 }
 
 (async () => {
