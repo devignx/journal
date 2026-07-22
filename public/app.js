@@ -471,8 +471,23 @@ const PROVIDERS = [
         <li>Paste this URL — leave client id &amp; secret <strong>empty</strong>:
           <div class="copy-row"><code>${esc(url)}</code><button data-copy="${esc(url)}">copy</button></div>
         </li>
-        <li>Claude redirects here — log in with your Lapse email &amp; password</li>
+        <li>Claude redirects here — log in to Lapse, then Authorize</li>
         <li>Done. In any chat: <em>“log this: …”</em></li>
+      </ol>`,
+  },
+  {
+    id: "chatgpt",
+    label: "ChatGPT",
+    auth: "OAuth — no token needed",
+    usesToken: false,
+    render: (url) => `
+      <ol class="setup-steps">
+        <li>ChatGPT → Settings → <strong>Connectors</strong> (turn on <em>Developer mode</em> if you don't see custom connectors)</li>
+        <li>Create a connector → type <strong>MCP</strong> → paste this URL:
+          <div class="copy-row"><code>${esc(url)}</code><button data-copy="${esc(url)}">copy</button></div>
+        </li>
+        <li>Auth: <strong>OAuth</strong>. ChatGPT sends you to Lapse — log in, then Authorize.</li>
+        <li>Done. Enable the connector in a chat and say <em>“log this: …”</em></li>
       </ol>`,
   },
   {
@@ -505,6 +520,32 @@ const PROVIDERS = [
         </li>
         <li>Restart opencode</li>
       </ol>`;
+    },
+  },
+  {
+    id: "iphone",
+    label: "iPhone",
+    auth: "Bearer token · quick capture",
+    usesToken: true,
+    render: (url, token) => {
+      const captureUrl = url.replace(/\/mcp$/, "/api/capture");
+      return `
+      <ol class="setup-steps">
+        <li>New Shortcut → add <strong>Dictate Text</strong> (or Ask for Input / Text)</li>
+        <li>Add <strong>Get Contents of URL</strong>, set:
+          <ul>
+            <li>URL — <span class="mono">POST</span> to
+              <div class="copy-row"><code>${esc(captureUrl)}</code><button data-copy="${esc(captureUrl)}">copy</button></div>
+            </li>
+            <li>Header <span class="mono">Authorization</span>:
+              <div class="copy-row"><code>Bearer ${esc(token)}</code><button data-copy="Bearer ${esc(token)}">copy</button></div>
+            </li>
+            <li>Request Body <strong>JSON</strong>: <span class="mono">content</span> = the dictated text (optional <span class="mono">space</span>, <span class="mono">tags</span>)</li>
+          </ul>
+        </li>
+        <li>Trigger from the Home Screen, Action Button, or “Hey Siri, log to Lapse”.</li>
+      </ol>
+      <p class="token-note">Uses the plain capture endpoint (not MCP) — same bearer token, easiest for Shortcuts, share-sheet, or any device that can POST JSON.</p>`;
     },
   },
   {
