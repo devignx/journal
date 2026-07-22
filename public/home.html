@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lapse — a log you write by talking</title>
+  <title>Lapse — you speak, it remembers</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <meta property="og:title" content="Lapse" />
@@ -257,6 +257,11 @@
       padding: 1rem 1.25rem;
     }
 
+    section p { margin-bottom: 0.9rem; }
+    .why-lede { font-size: 1.15rem; color: var(--fg); font-weight: 500; }
+    .cta { text-align: center; }
+    .cta-line { color: var(--fg); font-size: 1.1rem; font-weight: 600; margin-bottom: 1.25rem; }
+
     @media (prefers-reduced-motion: reduce) {
       html {
         scroll-behavior: auto;
@@ -284,12 +289,23 @@
           </linearGradient>
         </defs>
       </svg>
-      <h1 style="font-weight: 400;">a journal that writes itself</h1>
-      <p class="sub">talk to your AI — entries land here, tagged and searchable</p>
+      <h1 style="font-weight: 400;">you speak. it remembers.</h1>
+      <p class="sub">a personal memory layer any AI can read and write</p>
       <a class="pill" href="/?signup">SIGN UP</a>
-      <a class="learn" href="#how">Learn More</a>
+      <a class="learn" href="#why">Learn More</a>
     </div>
   </div>
+
+  <section id="why">
+    <h2>the problem</h2>
+    <p class="why-lede">Most note apps assume we'll stop and organize our thoughts. We usually don't — so ideas,
+      journal entries, and half-formed thoughts scatter and get forgotten.</p>
+    <p>Lapse removes that friction. It's a personal memory layer any AI can read and write — Claude, ChatGPT, an
+      iPhone Shortcut, a local model. You speak where you already are, and it captures the thought — tagged, dated,
+      linked, filed into the right space.</p>
+    <p><strong>And any agent can read it back</strong> — by tag, by time, by connection. That's the part most
+      capture tools miss.</p>
+  </section>
 
   <section id="how">
     <h2>how it works</h2>
@@ -307,8 +323,14 @@
       </div>
       <div class="step"><span class="n">03</span>
         <div><strong>Just talk</strong>
-          <p>“log this: shipped the project today.” Saved in your own words, timestamped, tagged. Read it back here
-            anytime.</p>
+          <p>“log this: shipped the project today.” Saved in your own words, timestamped, tagged, filed into the
+            right space.</p>
+        </div>
+      </div>
+      <div class="step"><span class="n">04</span>
+        <div><strong>Read it back</strong>
+          <p>Ask any agent: “what did I do last week?”, “when did I last mention Asha?”. It answers from your
+            memory — by tag, by time, by connection. Or open the graph and see it all connect.</p>
         </div>
       </div>
     </div>
@@ -343,6 +365,14 @@
     </div>
   </section>
 
+  <section id="speaking">
+    <h2>made for speaking, not typing</h2>
+    <p>I use Lapse with the iPhone <strong>Action Button</strong>: press, dictate, done. On-device intelligence
+      cleans up the words and tags them, and the thought lands in the right space — no app opened, no keyboard.</p>
+    <p>Anything that can POST a line of JSON can write to Lapse — a Shortcut, a wearable, a script. It's there where
+      you're already speaking.</p>
+  </section>
+
   <section id="good-to-know">
     <h2>good to know</h2>
     <ul class="notes">
@@ -361,16 +391,24 @@
   <section id="tools">
     <h2>what your agent can do</h2>
     <div class="tools">
-      <span>log entries</span><span>backdate</span><span>tag</span><span>search</span><span>date
-        ranges</span><span>weekly review</span><span>random memory</span><span>stats &amp;
-        streaks</span><span>edit</span><span>delete (asks first)</span>
+      <span>log entries</span><span>typed tags</span><span>spaces</span><span>search</span><span>date
+        ranges</span><span>weekly review</span><span>resurface memories</span><span>graph</span><span>stats &amp;
+        streaks</span><span>edit &amp; delete (asks first)</span>
     </div>
-    <p class="tools-note">Plus three built-in prompts your client can surface: <span class="mono">log_today</span>,
-      <span class="mono">weekly_review</span>, <span class="mono">remember_this</span>.
+    <p class="tools-note">Plus <span class="mono">get_context</span> so any agent knows your latest state, and three
+      built-in prompts: <span class="mono">log_today</span>, <span class="mono">weekly_review</span>,
+      <span class="mono">remember_this</span>.
     </p>
   </section>
 
+  <section id="open">
+    <h2>open by design</h2>
+    <p>An MCP server, a custom connector, a REST API, and a graph-based memory you can traverse. No lock-in — your
+      journal is reachable from anything that speaks HTTP.</p>
+  </section>
+
   <section class="cta">
+    <p class="cta-line">Not a notes app. A memory layer.</p>
     <a class="pill" href="/?signup">START YOUR JOURNAL</a>
   </section>
 

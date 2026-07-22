@@ -288,14 +288,13 @@ header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
 .account-menu svg { color: var(--muted); flex: none; }
 .menu-sep { height: 1px; background: var(--line); margin: 0.35rem 0; }
 
-/* entry space label (All view) */
+/* entry space label (All view) — plain uppercase mono, pairs with the time */
 .entry-space {
   font-family: "JetBrains Mono", monospace;
-  font-size: 0.62rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--violet);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.02rem 0.45rem;
 }
 
 /* ---------- graph view ---------- */
@@ -500,7 +499,7 @@ header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
 }
 .entry p a { color: var(--cyan); text-decoration-color: rgba(34, 211, 238, 0.4); }
 .entry .entry-tags { margin-top: 0.6rem; display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.entry .entry-tags span {
+.entry .entry-tags > span {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.72rem;
   color: var(--muted);

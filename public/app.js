@@ -713,8 +713,10 @@ const PROVIDERS = [
         "Return only a CSV of two lowercase tags for the message above — nothing else. Example format: personal,reflection (change the values to fit the message).";
       return `
       <ol class="setup-steps">
-        <li>New Shortcut → add <strong>Dictate Text</strong></li>
-        <li><strong>Have the Claude app? Auto-tag it</strong> — add <strong>Ask Claude</strong>, pass the <span class="mono">Dictated Text</span> with this prompt (makes entries far more searchable):
+        <li>New Shortcut → add <strong>Dictate Text</strong> (or bind it to the <strong>Action Button</strong>)</li>
+        <li><strong>Clean up &amp; tag on-device (optional)</strong> — run the dictation through an on-device
+          intelligence action (Apple Intelligence — private, no cloud) to tidy it and return tags. Feed its output to
+          <span class="mono">tags</span> below. Prompt to reuse:
           <div class="copy-row"><pre>${esc(tagPrompt)}</pre><button data-copy="${esc(tagPrompt)}">copy</button></div>
         </li>
         <li>Add <strong>Get Contents of URL</strong>:
