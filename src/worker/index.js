@@ -92,6 +92,38 @@ export default {
       return handleMcp(request, env.DB, user.id);
     }
 
+    // ---------- quick capture (token-authed; for Shortcuts, scripts, devices) ----------
+    // POST { content, space?, tags?, timestamp? } with Authorization: Bearer lapse_...
+    if (pathname === "/api/capture" && method === "POST") {
+      const auth = request.headers.get("Authorization") || "";
+      const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+      const user = bearer
+        ? bearer.startsWith("jat_")
+          ? await oauth.getUserByAccessToken(env.DB, bearer)
+          : await store.getUserByToken(env.DB, bearer)
+        : null;
+      if (!user) return json({ error: "unauthorized" }, 401);
+
+      const body = await request.json().catch(() => ({}));
+      const content = body.content;
+      if (!content || !String(content).trim()) return json({ error: "content_required" }, 400);
+      const tags = Array.isArray(body.tags)
+        ? body.tags
+        : typeof body.tags === "string"
+          ? body.tags.split(",")
+          : [];
+      const spaceId = await store.resolveSpaceId(env.DB, user.id, {
+        spaceName: body.space,
+        autoCreate: true,
+      });
+      const entry = await store.addEntry(env.DB, user.id, spaceId, {
+        content,
+        tags,
+        timestamp: body.timestamp,
+      });
+      return json({ ok: true, id: entry.id, space_id: entry.space_id });
+    }
+
     // ---------- auth API ----------
     // No password signup/login — the email gate is magic-link only (below).
 
