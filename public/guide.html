@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lapse — guide</title>
+  <link rel="icon" href="/icon.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Roboto+Flex:opsz,wght@8..144,300..700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --bg: #17171b; --raise: #1e1e24; --fg: #dde8f1; --muted: #8b8f9a;
+      --line: #2a2a32; --violet: #8b5cf6; --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: "Roboto Flex", system-ui, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.65; }
+    .mono { font-family: "JetBrains Mono", monospace; }
+    a { color: var(--fg); text-underline-offset: 3px; }
+    code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 0.05rem 0.35rem; }
+
+    header.top {
+      max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    header.top .brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; }
+    header.top .brand svg { width: 26px; height: 26px; }
+    header.top a { color: var(--muted); font-size: 0.9rem; }
+
+    main { max-width: 720px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+    h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); font-weight: 700; letter-spacing: -0.02em; }
+    .lede { color: var(--muted); font-size: 1.05rem; margin: 0.5rem 0 3rem; }
+
+    section { margin-bottom: 2.75rem; }
+    h2 {
+      font-family: "JetBrains Mono", monospace; font-size: 0.8rem; font-weight: 500;
+      color: var(--muted); text-transform: lowercase; letter-spacing: 0.08em;
+      margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--line);
+    }
+    p { margin-bottom: 0.9rem; }
+    ul { list-style: none; display: grid; gap: 0.6rem; margin-bottom: 0.9rem; }
+    li { padding-left: 1.1rem; position: relative; }
+    li::before { content: "·"; position: absolute; left: 0; color: var(--violet); }
+    strong { font-weight: 600; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0 1rem; }
+    .chip {
+      font-family: "JetBrains Mono", monospace; font-size: 0.75rem;
+      border: 1px solid var(--tag, var(--line)); border-radius: 999px;
+      padding: 0.15rem 0.6rem; color: var(--fg);
+    }
+    .chip .t { color: var(--tag, var(--muted)); margin-right: 0.3rem; opacity: 0.85; }
+    .chip.person  { --tag: #6ea8ff; }
+    .chip.project { --tag: #b98bff; }
+    .chip.place   { --tag: #45d0c0; }
+    .chip.mood    { --tag: #f0a35e; }
+    .chip.topic   { --tag: #7fd97f; }
+
+    .cta { display: inline-block; background: #fff; color: #17171b; border-radius: 999px; padding: 0.7rem 1.6rem; font-weight: 600; text-decoration: none; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <span class="brand">
+      <svg viewBox="0 0 62 60" fill="none" aria-hidden="true">
+        <path d="M44.0724 16.1665C48.8695 11.3694 56.9546 11.3672 59.4736 17.6663C60.1656 19.3967 60.7 21.1954 61.0656 23.0413C62.2335 28.9383 61.6258 35.0524 59.3195 40.6104C57.0131 46.1683 53.1117 50.9206 48.1085 54.2661C43.1053 57.6116 37.2251 59.4002 31.2114 59.4056C25.1977 59.4111 19.3207 57.6331 14.3236 54.2966C9.32643 50.9601 5.43356 46.2149 3.13725 40.6611C0.840947 35.1073 0.244337 28.9943 1.42287 23.0951C1.79308 21.242 2.33324 19.4362 3.03196 17.6988C5.56333 11.4047 13.6471 11.4083 18.4442 16.2054L22.5529 20.3141C27.35 25.1112 35.1277 25.1112 39.9248 20.3141L44.0724 16.1665Z" fill="#8b5cf6"/>
+        <circle cx="31" cy="9" r="9" fill="#22d3ee"/>
+      </svg>
+      Lapse
+    </span>
+    <a href="/">← back to journal</a>
+  </header>
+
+  <main>
+    <h1>How Lapse works</h1>
+    <p class="lede">A journal your AI writes for you. Here's how to get the most out of it.</p>
+
+    <section>
+      <h2>three ways to log</h2>
+      <ul>
+        <li><strong>Talk to your AI.</strong> Say “log this: shipped the redesign today” in Claude, ChatGPT, or any connected client. It writes the entry in your words, tagged and timestamped.</li>
+        <li><strong>Quick capture.</strong> An iPhone Shortcut (or any device) POSTs straight to your journal — dictate on the move, no app to open.</li>
+        <li><strong>Write it here.</strong> The box at the top of the feed logs directly to the current space.</li>
+      </ul>
+      <p class="mono" style="color:var(--muted);font-size:0.85rem">Every entry remembers where it came from — you'll see a small <em>via AI</em> / <em>via capture</em> label.</p>
+    </section>
+
+    <section>
+      <h2>spaces</h2>
+      <p>Entries live in <strong>spaces</strong> — separate areas of your life: Journal, Career, Philosophy, Legacy, whatever you name. Switch with the dropdown next to the logo; your AI can log to a named space (“add to my career space”) and create new ones on the fly.</p>
+    </section>
+
+    <section>
+      <h2>tags &amp; typed tags</h2>
+      <p>Tags link entries together. Beyond plain tags like <code>work</code> or <code>health</code>, Lapse understands <strong>typed tags</strong> — metadata that names the <em>things</em> in your life:</p>
+      <div class="chips">
+        <span class="chip person"><span class="t">person</span>asha</span>
+        <span class="chip project"><span class="t">project</span>lapse</span>
+        <span class="chip place"><span class="t">place</span>goa</span>
+        <span class="chip mood"><span class="t">mood</span>low</span>
+        <span class="chip topic"><span class="t">topic</span>stoicism</span>
+      </div>
+      <p>Write them as <code>type:value</code>. They become nodes in your graph — so “everyone I mention when I'm stressed” or “every entry about a project” becomes answerable. Your AI reuses the exact values it already knows, so the vocabulary stays clean.</p>
+    </section>
+
+    <section>
+      <h2>the graph</h2>
+      <p>Open <strong>Graph</strong> from the account menu to see your tags as a network — nodes sized by how often you use them, linked when they appear together. Filter by space at the top. It's a map of your themes: what clusters, what connects, what's drifted apart.</p>
+    </section>
+
+    <section>
+      <h2>rituals your AI can run</h2>
+      <ul>
+        <li><strong>log_today</strong> — a couple of quick questions, then it journals your day.</li>
+        <li><strong>weekly_review</strong> — reads the week, reflects patterns back, offers to save the reflection.</li>
+        <li><strong>remember_this</strong> — resurfaces a random past entry.</li>
+      </ul>
+      <p>These show up in the connector's prompt menu. You can also just ask: “what did I do last week?”, “when did I last mention Asha?”, “am I on a streak?”.</p>
+    </section>
+
+    <section>
+      <h2>editing</h2>
+      <p>Hover any entry to <strong>edit</strong> or <strong>delete</strong> it. Your AI can update and delete too — but it always confirms before removing anything.</p>
+    </section>
+
+    <section>
+      <h2>your data</h2>
+      <p>Everything is scoped to your account and invisible to others. Login is passwordless — a one-time email link. Access tokens are stored hashed, never in plaintext. It's your journal; treat it as your legacy.</p>
+      <a class="cta" href="/">Open your journal</a>
+    </section>
+  </main>
+</body>
+</html>

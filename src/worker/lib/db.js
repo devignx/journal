@@ -193,16 +193,32 @@ async function attachTagsAll(DB, entries) {
   return Promise.all(entries.map((e) => attachTags(DB, e)));
 }
 
+// One tag = one word. Malformed input is accepted and cleaned here:
+// plain multi-word tags split into separate words; typed tags (type:value)
+// stay one node with spaces hyphenated so "person:john doe" doesn't fracture.
 function normalizeTags(tags) {
-  return [...new Set((tags || []).map((t) => String(t).trim().toLowerCase()).filter(Boolean))];
+  const out = [];
+  for (let raw of tags || []) {
+    raw = String(raw).trim().toLowerCase();
+    if (!raw) continue;
+    const i = raw.indexOf(":");
+    if (i > 0) {
+      const type = raw.slice(0, i).trim().replace(/\s+/g, "-");
+      const val = raw.slice(i + 1).trim().replace(/\s+/g, "-");
+      if (type && val) out.push(`${type}:${val}`);
+    } else {
+      for (const w of raw.split(/[\s,]+/)) if (w) out.push(w);
+    }
+  }
+  return [...new Set(out)];
 }
 
-export async function addEntry(DB, userId, spaceId, { content, timestamp, raw_source, tags }) {
+export async function addEntry(DB, userId, spaceId, { content, timestamp, raw_source, tags, via }) {
   const ts = timestamp || new Date().toISOString();
   const row = await DB.prepare(
-    "INSERT INTO entries (user_id, space_id, content, timestamp, raw_source) VALUES (?, ?, ?, ?, ?) RETURNING id"
+    "INSERT INTO entries (user_id, space_id, content, timestamp, raw_source, via) VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
   )
-    .bind(userId, spaceId, content, ts, raw_source || null)
+    .bind(userId, spaceId, content, ts, raw_source || null, via || "unknown")
     .first();
   const clean = normalizeTags(tags);
   if (clean.length) {
@@ -223,7 +239,7 @@ export async function getEntry(DB, userId, id) {
   return attachTags(DB, entry);
 }
 
-export async function updateEntry(DB, userId, id, { content, timestamp }) {
+export async function updateEntry(DB, userId, id, { content, timestamp, tags }) {
   const existing = await getEntry(DB, userId, id);
   if (!existing) return null;
   await DB.prepare(
@@ -231,6 +247,18 @@ export async function updateEntry(DB, userId, id, { content, timestamp }) {
   )
     .bind(content ?? existing.content, timestamp ?? existing.timestamp, id, userId)
     .run();
+  // When tags is provided (web edit), replace the whole set.
+  if (Array.isArray(tags)) {
+    await DB.prepare("DELETE FROM tags WHERE entry_id = ?").bind(id).run();
+    const clean = normalizeTags(tags);
+    if (clean.length) {
+      await DB.batch(
+        clean.map((t) =>
+          DB.prepare("INSERT OR IGNORE INTO tags (entry_id, tag) VALUES (?, ?)").bind(id, t)
+        )
+      );
+    }
+  }
   return getEntry(DB, userId, id);
 }
 
@@ -252,6 +280,17 @@ export async function getRecent(DB, userId, spaceId, limit = 10, offset = 0) {
     "SELECT * FROM entries WHERE user_id = ? AND space_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?"
   )
     .bind(userId, spaceId, limit, offset)
+    .all();
+  return attachTagsAll(DB, results);
+}
+
+// All entries across every space, newest first, each carrying its space name.
+export async function getRecentAll(DB, userId, limit = 50, offset = 0) {
+  const { results } = await DB.prepare(
+    `SELECT e.*, s.name AS space FROM entries e JOIN spaces s ON s.id = e.space_id
+     WHERE e.user_id = ? ORDER BY e.timestamp DESC LIMIT ? OFFSET ?`
+  )
+    .bind(userId, limit, offset)
     .all();
   return attachTagsAll(DB, results);
 }
@@ -328,6 +367,146 @@ export async function listTags(DB, userId, spaceId) {
     .bind(userId, spaceId)
     .all();
   return results;
+}
+
+// ---------- ambient context (for MCP initialize + get_context) ----------
+
+// A small, non-critical situational snapshot so agents don't answer from stale
+// conversation memory when other clients/devices have written since.
+export async function buildContext(DB, userId) {
+  const snippet = (s, n = 140) => (s && s.length > n ? s.slice(0, n) + "…" : s);
+
+  const last = await DB.prepare(
+    `SELECT e.id, e.content, e.timestamp, e.via, s.name AS space
+     FROM entries e JOIN spaces s ON s.id = e.space_id
+     WHERE e.user_id = ? ORDER BY e.timestamp DESC LIMIT 1`
+  )
+    .bind(userId)
+    .first();
+
+  const counts = await DB.prepare(
+    `SELECT
+       SUM(CASE WHEN timestamp >= date('now') THEN 1 ELSE 0 END) AS today,
+       SUM(CASE WHEN timestamp >= datetime('now','-7 days') THEN 1 ELSE 0 END) AS week,
+       COUNT(*) AS total
+     FROM entries WHERE user_id = ?`
+  )
+    .bind(userId)
+    .first();
+
+  // distinct entry days (last 60) → current streak
+  const { results: days } = await DB.prepare(
+    `SELECT DISTINCT date(timestamp) AS d FROM entries
+     WHERE user_id = ? AND timestamp >= datetime('now','-60 days')
+     ORDER BY d DESC`
+  )
+    .bind(userId)
+    .all();
+  let streak = 0;
+  if (days.length) {
+    const dayMs = 86400000;
+    const today = new Date(new Date().toISOString().slice(0, 10)).getTime();
+    let cursor = today;
+    const set = new Set(days.map((r) => r.d));
+    // allow streak to count if the most recent day is today or yesterday
+    if (!set.has(new Date(today).toISOString().slice(0, 10))) cursor = today - dayMs;
+    while (set.has(new Date(cursor).toISOString().slice(0, 10))) {
+      streak++;
+      cursor -= dayMs;
+    }
+  }
+  const daysSince = last
+    ? Math.floor((Date.now() - new Date(last.timestamp).getTime()) / 86400000)
+    : null;
+
+  const spaces = await DB.prepare(
+    `SELECT s.name, s.is_default,
+            (SELECT COUNT(*) FROM entries e WHERE e.space_id = s.id) AS entry_count,
+            (SELECT MAX(e.timestamp) FROM entries e WHERE e.space_id = s.id) AS last_entry_at
+     FROM spaces s WHERE s.user_id = ? ORDER BY s.is_default DESC, s.name COLLATE NOCASE`
+  )
+    .bind(userId)
+    .all();
+
+  // namespaced tags → known entities vocabulary
+  const { results: typed } = await DB.prepare(
+    `SELECT DISTINCT t.tag FROM tags t JOIN entries e ON e.id = t.entry_id
+     WHERE e.user_id = ? AND t.tag LIKE '%:%'`
+  )
+    .bind(userId)
+    .all();
+  const known_entities = {};
+  for (const { tag } of typed) {
+    const i = tag.indexOf(":");
+    const type = tag.slice(0, i);
+    const val = tag.slice(i + 1);
+    (known_entities[type] ||= []).push(val);
+  }
+
+  const { results: recentTags } = await DB.prepare(
+    `SELECT t.tag, COUNT(*) AS c FROM tags t JOIN entries e ON e.id = t.entry_id
+     WHERE e.user_id = ? AND e.timestamp >= datetime('now','-30 days')
+     GROUP BY t.tag ORDER BY c DESC, t.tag LIMIT 15`
+  )
+    .bind(userId)
+    .all();
+
+  const review = await DB.prepare(
+    `SELECT MAX(e.timestamp) AS ts FROM entries e JOIN tags t ON t.entry_id = e.id
+     WHERE e.user_id = ? AND t.tag = 'review'`
+  )
+    .bind(userId)
+    .first();
+
+  return {
+    server_time_utc: new Date().toISOString(),
+    total_entries: counts.total || 0,
+    entries_today: counts.today || 0,
+    entries_this_week: counts.week || 0,
+    current_streak_days: streak,
+    days_since_last_entry: daysSince,
+    last_entry: last
+      ? { id: last.id, snippet: snippet(last.content), timestamp: last.timestamp, space: last.space, via: last.via }
+      : null,
+    spaces: spaces.results.map((s) => ({
+      name: s.name,
+      entry_count: s.entry_count,
+      last_entry_at: s.last_entry_at,
+    })),
+    known_entities,
+    top_recent_tags: recentTags.map((r) => r.tag),
+    last_review_at: review.ts || null,
+  };
+}
+
+// ---------- graph (tag co-occurrence) ----------
+
+// spaceIds: array of ids to include, or null for all the user's spaces.
+export async function getGraph(DB, userId, spaceIds) {
+  const useFilter = Array.isArray(spaceIds) && spaceIds.length > 0;
+  const inClause = useFilter ? `AND e.space_id IN (${spaceIds.map(() => "?").join(",")})` : "";
+  const args = useFilter ? [userId, ...spaceIds] : [userId];
+
+  const { results: nodes } = await DB.prepare(
+    `SELECT t.tag, COUNT(*) AS count FROM tags t JOIN entries e ON e.id = t.entry_id
+     WHERE e.user_id = ? ${inClause}
+     GROUP BY t.tag ORDER BY count DESC`
+  )
+    .bind(...args)
+    .all();
+
+  const { results: edges } = await DB.prepare(
+    `SELECT t1.tag AS a, t2.tag AS b, COUNT(*) AS weight
+     FROM tags t1
+     JOIN tags t2 ON t1.entry_id = t2.entry_id AND t1.tag < t2.tag
+     JOIN entries e ON e.id = t1.entry_id
+     WHERE e.user_id = ? ${inClause}
+     GROUP BY t1.tag, t2.tag`
+  )
+    .bind(...args)
+    .all();
+
+  return { nodes, edges };
 }
 
 export async function getStats(DB, userId, spaceId) {

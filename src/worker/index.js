@@ -120,6 +120,7 @@ export default {
         content,
         tags,
         timestamp: body.timestamp,
+        via: "capture",
       });
       return json({ ok: true, id: entry.id, space_id: entry.space_id });
     }
@@ -219,7 +220,9 @@ export default {
         const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 200);
         const offset = Number(url.searchParams.get("offset")) || 0;
         let entries;
-        if (q) entries = await store.searchEntries(env.DB, user.id, spaceId, q, limit);
+        if (url.searchParams.get("space") === "all")
+          entries = await store.getRecentAll(env.DB, user.id, limit, offset);
+        else if (q) entries = await store.searchEntries(env.DB, user.id, spaceId, q, limit);
         else if (tag) entries = await store.getByTag(env.DB, user.id, spaceId, tag, limit);
         else if (start && end)
           entries = await store.getByDateRange(env.DB, user.id, spaceId, start, end);
@@ -227,7 +230,28 @@ export default {
         return json(entries);
       }
 
+      if (pathname === "/api/entries" && method === "POST") {
+        const b = await request.json().catch(() => ({}));
+        if (!b.content || !String(b.content).trim()) return json({ error: "content_required" }, 400);
+        const entry = await store.addEntry(env.DB, user.id, spaceId, {
+          content: b.content,
+          tags: Array.isArray(b.tags) ? b.tags : [],
+          timestamp: b.timestamp,
+          via: "web",
+        });
+        return json(entry);
+      }
+
       const entryMatch = pathname.match(/^\/api\/entries\/(\d+)$/);
+      if (entryMatch && method === "PATCH") {
+        const b = await request.json().catch(() => ({}));
+        const updated = await store.updateEntry(env.DB, user.id, Number(entryMatch[1]), {
+          content: b.content,
+          timestamp: b.timestamp,
+          tags: b.tags, // array replaces tag set; undefined leaves them
+        });
+        return updated ? json(updated) : json({ error: "not_found" }, 404);
+      }
       if (entryMatch && method === "DELETE") {
         const deleted = await store.deleteEntry(env.DB, user.id, Number(entryMatch[1]));
         return deleted ? json({ ok: true }) : json({ error: "not_found" }, 404);
@@ -239,6 +263,18 @@ export default {
 
       if (pathname === "/api/stats" && method === "GET") {
         return json(await store.getStats(env.DB, user.id, spaceId));
+      }
+
+      if (pathname === "/api/context" && method === "GET") {
+        return json(await store.buildContext(env.DB, user.id));
+      }
+
+      if (pathname === "/api/graph" && method === "GET") {
+        const spacesParam = url.searchParams.get("spaces"); // csv of space ids, or omitted = all
+        const ids = spacesParam
+          ? spacesParam.split(",").map(Number).filter((n) => !Number.isNaN(n))
+          : null;
+        return json(await store.getGraph(env.DB, user.id, ids));
       }
 
       return json({ error: "not_found" }, 404);

@@ -93,6 +93,28 @@
         </button>
         <div class="account-menu" role="menu">
           <p class="account-email muted mono" id="account-email"></p>
+          <button role="menuitem" id="menu-all">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+            All entries
+          </button>
+          <button role="menuitem" id="menu-graph">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="4" cy="4" r="2" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <circle cx="12" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <circle cx="7" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.2" />
+              <path d="M5.5 5 10.5 5.5M5.5 5.5 6.5 10M10.5 7.5 8 10.5" stroke="currentColor" stroke-width="1.1" />
+            </svg>
+            Graph
+          </button>
+          <button role="menuitem" id="menu-guide">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3 2.5h7l3 3V13a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5ZM9.5 2.5V6h3.5M5 8h6M5 10.5h6" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
+            </svg>
+            Guide
+          </button>
+          <div class="menu-sep"></div>
           <button role="menuitem" id="menu-settings">
             <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
               <path
@@ -127,12 +149,34 @@
       <input id="search" type="search" placeholder="search…" />
     </div>
 
+    <form id="composer" class="composer">
+      <textarea id="composer-input" placeholder="Write an entry…" rows="1"></textarea>
+      <div class="composer-row hidden" id="composer-extra">
+        <input id="composer-tags" type="text" placeholder="tags, comma separated (person:asha, mood:good)" />
+        <button type="submit" id="composer-save">Log it</button>
+      </div>
+    </form>
+
     <main id="feed"></main>
     <p id="empty" class="muted hidden">
       No entries yet. Open <a href="#" id="empty-connect">connections</a>, link an agent,
       then say “log this: …” in any chat.
     </p>
     <button id="load-more" class="hidden">load more</button>
+
+    <!-- graph view -->
+    <section id="graph-view" class="graph-view hidden">
+      <div class="graph-bar">
+        <span class="graph-title mono">graph · <span id="graph-scope">all spaces</span></span>
+        <div class="graph-spaces" id="graph-spaces"></div>
+        <button id="graph-reset" class="icon-btn" title="Reset view">reset</button>
+      </div>
+      <div class="graph-stage">
+        <canvas id="graph-canvas"></canvas>
+        <div id="graph-empty" class="graph-empty muted hidden">Tag some entries to grow your graph.</div>
+      </div>
+      <div id="graph-tip" class="graph-tip hidden"></div>
+    </section>
   </section>
 
   <!-- connections modal -->

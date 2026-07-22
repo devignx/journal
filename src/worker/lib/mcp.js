@@ -23,6 +23,9 @@ const readSpaceId = (DB, userId, args) =>
 // Teaches any MCP client what this journal is for and how to use it well.
 const INSTRUCTIONS = `This is Lapse — the user's personal journal, a long-term record of their life, written by talking to you. Treat it as their legacy, not an app.
 
+## Staying current (read this first)
+Other agents AND the user's own devices (iPhone Shortcut, ChatGPT, the web app) write to this journal — including between your turns. Your conversation memory of "the last entry" goes stale fast. Before answering anything about recent state ("my last entry", "what did I log", "how many today", streaks), call 'get_context' and answer from that, not memory. A live snapshot is also injected below at connect time.
+
 ## When to log
 Log proactively whenever the user shares something that happened, a decision, a feeling, a milestone, or says "log this". Don't ask permission for obvious logs — just log and confirm in one short line. One event = one entry; a day recap can be one entry.
 
@@ -30,7 +33,11 @@ Log proactively whenever the user shares something that happened, a decision, a 
 - Preserve the user's voice: log close to their own words, first person, no corporate polish.
 - Set 'timestamp' to when the event actually happened (they may log yesterday's thing today).
 - Put their verbatim message in 'raw_source' when paraphrasing.
-- Tag consistently and sparingly (2-4 lowercase tags). Check 'list_tags' occasionally and reuse existing tags instead of inventing near-duplicates.
+
+## Tags & typed tags
+- Tag sparingly (2-4). Reuse existing tags — check 'known_entities' / 'top_recent_tags' in context, or 'list_tags'. Don't invent near-duplicates.
+- Prefer NAMESPACED tags for entities so they become graph nodes: 'person:asha', 'project:lapse', 'place:goa', 'mood:low', 'topic:stoicism'. Reuse the exact existing value ('person:asha', never a new 'person:aasha') — the 'known_entities' vocabulary in context lists what's already used.
+- Mix freely: a single entry can carry plain tags ('work') and typed tags ('person:asha','mood:tired').
 
 ## Spaces
 Entries live in named spaces — separate areas of the user's life (e.g. Journal, Philosophy, Career, Legacy). Every entry tool takes an optional 'space' name.
@@ -79,7 +86,7 @@ const TOOLS = [
         spaceName: args.space,
         autoCreate: true,
       });
-      return store.addEntry(DB, userId, spaceId, args);
+      return store.addEntry(DB, userId, spaceId, { ...args, via: "mcp" });
     },
   },
   {
@@ -226,6 +233,13 @@ const TOOLS = [
       store.getStats(DB, userId, await readSpaceId(DB, userId, args)),
   },
   {
+    name: "get_context",
+    description:
+      "Current state of the journal: last entry (with which client wrote it), counts, streak, spaces, known tag vocabulary, last review. Call before answering anything about recent activity — other clients and the user's devices write here between turns, so your memory may be stale.",
+    inputSchema: { type: "object", properties: {} },
+    handler: (DB, userId) => store.buildContext(DB, userId),
+  },
+  {
     name: "list_spaces",
     description:
       "List the user's spaces (named areas that entries live in), with entry counts and which is the default.",
@@ -276,6 +290,34 @@ const PROMPTS = [
   },
 ];
 
+// Compact live snapshot appended to instructions at connect time.
+function formatContext(c) {
+  const lines = [`## Current state (as of ${c.server_time_utc} — trust this over your own memory of "recent")`];
+  if (c.last_entry) {
+    const e = c.last_entry;
+    lines.push(`- Last entry: #${e.id} in "${e.space}" via ${e.via}, ${e.timestamp} — "${e.snippet}"`);
+  } else {
+    lines.push(`- Last entry: none yet`);
+  }
+  lines.push(
+    `- Volume: ${c.entries_today} today · ${c.entries_this_week} this week · ${c.total_entries} total · streak ${c.current_streak_days}d` +
+      (c.days_since_last_entry != null ? ` · ${c.days_since_last_entry}d since last` : "")
+  );
+  if (c.spaces.length)
+    lines.push(`- Spaces: ${c.spaces.map((s) => `${s.name}(${s.entry_count})`).join(", ")}`);
+  const ke = Object.entries(c.known_entities);
+  if (ke.length)
+    lines.push(
+      `- Known entities (reuse these exact values when tagging): ` +
+        ke.map(([t, vals]) => `${t}: ${vals.join(", ")}`).join(" · ")
+    );
+  if (c.top_recent_tags.length)
+    lines.push(`- Recent tags: ${c.top_recent_tags.join(", ")}`);
+  if (c.last_review_at) lines.push(`- Last review: ${c.last_review_at}`);
+  lines.push(`Call 'get_context' anytime to refresh — this snapshot is only current as of connect.`);
+  return lines.join("\n");
+}
+
 function rpcResult(id, result) {
   return { jsonrpc: "2.0", id, result };
 }
@@ -294,11 +336,13 @@ async function handleMessage(DB, userId, msg) {
     case "initialize": {
       const requested = params.protocolVersion;
       const version = PROTOCOL_VERSIONS.includes(requested) ? requested : PROTOCOL_VERSIONS[1];
+      const ctx = await store.buildContext(DB, userId).catch(() => null);
+      const instructions = ctx ? `${INSTRUCTIONS}\n\n${formatContext(ctx)}` : INSTRUCTIONS;
       return rpcResult(id, {
         protocolVersion: version,
         capabilities: { tools: {}, prompts: {} },
-        serverInfo: { name: "lapse", version: "2.1.0" },
-        instructions: INSTRUCTIONS,
+        serverInfo: { name: "lapse", version: "2.2.0" },
+        instructions,
       });
     }
     case "ping":

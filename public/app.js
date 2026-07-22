@@ -14,6 +14,8 @@ const state = {
   provider: "claude",
   spaces: [], // [{id,name,is_default,entry_count}]
   activeSpaceId: null,
+  view: "feed", // "feed" | "all" | "graph"
+  graphSpaces: null, // Set of space ids to include, or null = all
 };
 
 // Scope a read to the active space.
@@ -102,10 +104,47 @@ $("menu-settings").addEventListener("click", () => {
   openSettings();
 });
 
+$("menu-all").addEventListener("click", () => {
+  account.classList.remove("open");
+  setView("all");
+});
+$("menu-graph").addEventListener("click", () => {
+  account.classList.remove("open");
+  setView("graph");
+});
+$("menu-guide").addEventListener("click", () => {
+  location.href = "/guide";
+});
+
 $("menu-logout").addEventListener("click", async () => {
   await api("/api/logout", { method: "POST" });
   location.reload();
 });
+
+// ---------- view switching (feed / all / graph) ----------
+
+// The space switcher returns to the single-space feed.
+async function setView(view) {
+  state.view = view;
+  const isGraph = view === "graph";
+  const isFeed = view === "feed";
+  $("composer").classList.toggle("hidden", !isFeed);
+  document.querySelector(".toolbar").classList.toggle("hidden", isGraph);
+  $("feed").classList.toggle("hidden", isGraph);
+  $("empty").classList.add("hidden");
+  $("load-more").classList.toggle("hidden", isGraph);
+  $("graph-view").classList.toggle("hidden", !isGraph);
+  // tag filter / search only make sense in single-space feed
+  $("tag-filter").classList.toggle("hidden", !isFeed);
+  $("search").classList.toggle("hidden", !isFeed);
+  $("sort-toggle").classList.toggle("hidden", !isFeed);
+
+  if (isGraph) {
+    await loadGraph();
+  } else {
+    await loadEntries();
+  }
+}
 
 // ---------- entry rendering ----------
 
@@ -127,28 +166,124 @@ function appendLinkified(node, text) {
   node.append(text.slice(last));
 }
 
+const VIA_LABEL = { mcp: "via AI", capture: "via capture" };
+
+function renderTag(t) {
+  const s = document.createElement("span");
+  const i = t.indexOf(":");
+  if (i > 0) {
+    s.className = "tag typed";
+    s.dataset.type = t.slice(0, i).toLowerCase();
+    s.innerHTML = `<span class="tag-type">${esc(t.slice(0, i))}</span>${esc(t.slice(i + 1))}`;
+  } else {
+    s.className = "tag";
+    s.textContent = t;
+  }
+  return s;
+}
+
+function renderTagsRow(entry) {
+  const tags = document.createElement("div");
+  tags.className = "entry-tags";
+  for (const t of entry.tags || []) tags.append(renderTag(t));
+  return tags;
+}
+
 function renderEntry(entry) {
   const el = document.createElement("article");
   el.className = "entry";
+  el.dataset.id = entry.id;
+
+  const meta = document.createElement("div");
+  meta.className = "entry-meta";
+  if (entry.space) {
+    const sp = document.createElement("span");
+    sp.className = "entry-space";
+    sp.textContent = entry.space;
+    meta.append(sp);
+  }
   const time = document.createElement("time");
   const d = new Date(entry.timestamp);
   time.textContent = isNaN(d)
     ? entry.timestamp
     : d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  meta.append(time);
+  if (VIA_LABEL[entry.via]) {
+    const via = document.createElement("span");
+    via.className = "entry-via";
+    via.textContent = VIA_LABEL[entry.via];
+    meta.append(via);
+  }
+  const actions = document.createElement("div");
+  actions.className = "entry-actions";
+  const editBtn = document.createElement("button");
+  editBtn.className = "entry-act";
+  editBtn.textContent = "edit";
+  editBtn.addEventListener("click", () => startEditEntry(el, entry));
+  const delBtn = document.createElement("button");
+  delBtn.className = "entry-act danger";
+  delBtn.textContent = "delete";
+  delBtn.addEventListener("click", () => deleteEntryWeb(entry));
+  actions.append(editBtn, delBtn);
+  meta.append(actions);
+
   const p = document.createElement("p");
   appendLinkified(p, entry.content);
-  el.append(time, p);
-  if (entry.tags && entry.tags.length) {
-    const tags = document.createElement("div");
-    tags.className = "entry-tags";
-    for (const t of entry.tags) {
-      const s = document.createElement("span");
-      s.textContent = t;
-      tags.append(s);
-    }
-    el.append(tags);
-  }
+
+  el.append(meta, p);
+  if (entry.tags && entry.tags.length) el.append(renderTagsRow(entry));
   return el;
+}
+
+// inline editor swaps the entry's body for a textarea + tags input
+function startEditEntry(el, entry) {
+  el.classList.add("editing");
+  el.querySelector("p")?.remove();
+  el.querySelector(".entry-tags")?.remove();
+  el.querySelector(".entry-actions")?.remove();
+
+  const form = document.createElement("form");
+  form.className = "entry-edit";
+  form.innerHTML = `
+    <textarea class="edit-content" rows="3"></textarea>
+    <input class="edit-tags" type="text" placeholder="tags, comma separated (person:asha, mood:good)" />
+    <div class="edit-actions">
+      <button type="submit">Save</button>
+      <button type="button" class="edit-cancel">Cancel</button>
+    </div>`;
+  form.querySelector(".edit-content").value = entry.content;
+  form.querySelector(".edit-tags").value = (entry.tags || []).join(", ");
+  form.querySelector(".edit-cancel").addEventListener("click", () => loadEntries());
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const content = form.querySelector(".edit-content").value.trim();
+    if (!content) return;
+    const tags = form
+      .querySelector(".edit-tags")
+      .value.split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    await api(`/api/entries/${entry.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ content, tags }),
+    });
+    await reloadAll();
+  });
+  el.append(form);
+  form.querySelector(".edit-content").focus();
+}
+
+async function deleteEntryWeb(entry) {
+  if (!confirm("Delete this entry? This can't be undone.")) return;
+  await api(`/api/entries/${entry.id}`, { method: "DELETE" });
+  await reloadAll();
+}
+
+// re-fetch everything for the current space (after any mutation)
+async function reloadAll() {
+  await loadSpaces();
+  await Promise.all([loadStats(), loadTags()]);
+  await loadEntries();
 }
 
 // ---------- date grouping ----------
@@ -212,15 +347,22 @@ function renderFeed() {
   }
 
   $("empty").classList.toggle("hidden", state.entries.length > 0);
-  const filtered = $("search").value.trim() || state.activeTag;
-  $("load-more").classList.toggle(
-    "hidden",
-    filtered || state.entries.length >= state.totalEntries
-  );
+  let more;
+  if (state.view === "all") {
+    more = state.entries.length > 0 && state.entries.length % state.limit === 0;
+  } else {
+    const filtered = $("search").value.trim() || state.activeTag;
+    more = !filtered && state.entries.length < state.totalEntries;
+  }
+  $("load-more").classList.toggle("hidden", !more);
   renderCount();
 }
 
 function renderCount() {
+  if (state.view === "all") {
+    $("entry-count").textContent = `${state.entries.length} shown · all spaces`;
+    return;
+  }
   const q = $("search").value.trim();
   let text;
   if (q) text = `${state.entries.length} matching “${q}”`;
@@ -232,11 +374,17 @@ function renderCount() {
 // ---------- data loading ----------
 
 async function loadEntries({ append = false } = {}) {
-  const q = $("search").value.trim();
-  const params = withSpace(new URLSearchParams({ limit: state.limit }));
-  if (q) params.set("q", q);
-  else if (state.activeTag) params.set("tag", state.activeTag);
-  else if (append) params.set("offset", state.offset);
+  let params;
+  if (state.view === "all") {
+    params = new URLSearchParams({ limit: state.limit, space: "all" });
+    if (append) params.set("offset", state.offset);
+  } else {
+    const q = $("search").value.trim();
+    params = withSpace(new URLSearchParams({ limit: state.limit }));
+    if (q) params.set("q", q);
+    else if (state.activeTag) params.set("tag", state.activeTag);
+    else if (append) params.set("offset", state.offset);
+  }
   const entries = await api(`/api/entries?${params}`);
   if (append) {
     state.entries = state.entries.concat(entries);
@@ -372,7 +520,12 @@ async function switchSpace(id) {
   $("tag-filter").value = "";
   renderSpaceSwitcher();
   await Promise.all([loadStats(), loadTags()]);
-  await loadEntries();
+  // picking a space always returns to the single-space feed
+  if (state.view !== "feed") {
+    await setView("feed");
+  } else {
+    await loadEntries();
+  }
 }
 
 async function deleteSpace(space) {
@@ -438,12 +591,39 @@ $("refresh-btn").addEventListener("click", async () => {
   const btn = $("refresh-btn");
   btn.classList.add("spinning");
   try {
-    await loadSpaces(); // refresh space list + entry counts
-    await Promise.all([loadStats(), loadTags()]);
-    await loadEntries(); // keeps current space, tag, search, sort
+    await reloadAll(); // keeps current space, tag, search, sort
   } finally {
     setTimeout(() => btn.classList.remove("spinning"), 500);
   }
+});
+
+// ---------- composer (web add, via "web") ----------
+
+$("composer-input").addEventListener("focus", () =>
+  $("composer-extra").classList.remove("hidden")
+);
+$("composer-input").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    e.preventDefault();
+    $("composer").requestSubmit();
+  }
+});
+$("composer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const content = $("composer-input").value.trim();
+  if (!content) return;
+  const tags = $("composer-tags")
+    .value.split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  await api(`/api/entries?${withSpace(new URLSearchParams())}`, {
+    method: "POST",
+    body: JSON.stringify({ content, tags }),
+  });
+  $("composer-input").value = "";
+  $("composer-tags").value = "";
+  $("composer-extra").classList.add("hidden");
+  await reloadAll();
 });
 
 $("empty-connect").addEventListener("click", (e) => {
@@ -644,6 +824,301 @@ function openSettings() {
 
 $("settings-close").addEventListener("click", () => $("settings").close());
 
+// ---------- graph view (canvas force-directed tag graph) ----------
+
+const TYPE_COLOR = {
+  person: "#6ea8ff",
+  project: "#b98bff",
+  place: "#45d0c0",
+  mood: "#f0a35e",
+  topic: "#7fd97f",
+};
+const PLAIN_COLOR = "#8b8f9a";
+
+const graph = {
+  nodes: [],
+  edges: [],
+  raf: null,
+  scale: 1,
+  ox: 0,
+  oy: 0,
+  drag: null, // {node} or {pan:true, ...}
+  hover: null,
+  selected: null,
+};
+
+function tagColor(tag) {
+  const i = tag.indexOf(":");
+  return i > 0 ? TYPE_COLOR[tag.slice(0, i)] || PLAIN_COLOR : PLAIN_COLOR;
+}
+function tagLabel(tag) {
+  const i = tag.indexOf(":");
+  return i > 0 ? tag.slice(i + 1) : tag;
+}
+
+function renderGraphSpaces() {
+  const bar = $("graph-spaces");
+  bar.innerHTML = "";
+  for (const s of state.spaces) {
+    const on = state.graphSpaces === null || state.graphSpaces.has(s.id);
+    const btn = document.createElement("button");
+    btn.className = "gspace" + (on ? " on" : "");
+    btn.textContent = s.name;
+    btn.addEventListener("click", () => {
+      if (state.graphSpaces === null) state.graphSpaces = new Set(state.spaces.map((x) => x.id));
+      on ? state.graphSpaces.delete(s.id) : state.graphSpaces.add(s.id);
+      if (state.graphSpaces.size === state.spaces.length) state.graphSpaces = null;
+      const scope = state.graphSpaces === null ? "all spaces" : `${state.graphSpaces.size} space${state.graphSpaces.size === 1 ? "" : "s"}`;
+      $("graph-scope").textContent = scope;
+      loadGraph();
+    });
+    bar.append(btn);
+  }
+}
+
+async function loadGraph() {
+  renderGraphSpaces();
+  const params = new URLSearchParams();
+  if (state.graphSpaces && state.graphSpaces.size)
+    params.set("spaces", [...state.graphSpaces].join(","));
+  const { nodes, edges } = await api(`/api/graph?${params}`);
+
+  $("graph-empty").classList.toggle("hidden", nodes.length > 0);
+
+  const canvas = $("graph-canvas");
+  const w = canvas.clientWidth || 600;
+  const h = canvas.clientHeight || 420;
+  const maxCount = Math.max(1, ...nodes.map((n) => n.count));
+  graph.nodes = nodes.map((n) => ({
+    tag: n.tag,
+    count: n.count,
+    r: 5 + 14 * Math.sqrt(n.count / maxCount),
+    x: w / 2 + (Math.random() - 0.5) * w * 0.6,
+    y: h / 2 + (Math.random() - 0.5) * h * 0.6,
+    vx: 0,
+    vy: 0,
+  }));
+  const byTag = new Map(graph.nodes.map((n) => [n.tag, n]));
+  graph.edges = edges
+    .map((e) => ({ a: byTag.get(e.a), b: byTag.get(e.b), w: e.weight }))
+    .filter((e) => e.a && e.b);
+  graph.scale = 1;
+  graph.ox = 0;
+  graph.oy = 0;
+  graph.selected = null;
+  graph.ticks = 0;
+  startGraphSim();
+}
+
+function startGraphSim() {
+  cancelAnimationFrame(graph.raf);
+  const canvas = $("graph-canvas");
+  const step = () => {
+    const w = canvas.clientWidth || 600;
+    const h = canvas.clientHeight || 420;
+    // physics (settle then idle to save CPU)
+    if (graph.ticks < 320) {
+      simTick(w, h);
+      graph.ticks++;
+    }
+    drawGraph(w, h);
+    graph.raf = requestAnimationFrame(step);
+  };
+  step();
+}
+
+function simTick(w, h) {
+  const N = graph.nodes;
+  for (const n of N) {
+    if (graph.drag && graph.drag.node === n) continue;
+    // repulsion
+    for (const m of N) {
+      if (m === n) continue;
+      let dx = n.x - m.x, dy = n.y - m.y;
+      let d2 = dx * dx + dy * dy || 0.01;
+      const f = 900 / d2;
+      n.vx += dx * f;
+      n.vy += dy * f;
+    }
+    // centering
+    n.vx += (w / 2 - n.x) * 0.002;
+    n.vy += (h / 2 - n.y) * 0.002;
+  }
+  // springs
+  for (const e of graph.edges) {
+    let dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
+    let d = Math.hypot(dx, dy) || 0.01;
+    const target = 60 + 30 / Math.sqrt(e.w);
+    const f = (d - target) * 0.02;
+    const fx = (dx / d) * f, fy = (dy / d) * f;
+    if (!(graph.drag && graph.drag.node === e.a)) { e.a.vx += fx; e.a.vy += fy; }
+    if (!(graph.drag && graph.drag.node === e.b)) { e.b.vx -= fx; e.b.vy -= fy; }
+  }
+  for (const n of N) {
+    if (graph.drag && graph.drag.node === n) continue;
+    n.vx *= 0.85;
+    n.vy *= 0.85;
+    n.x += n.vx;
+    n.y += n.vy;
+  }
+}
+
+function drawGraph(w, h) {
+  const canvas = $("graph-canvas");
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.translate(graph.ox, graph.oy);
+  ctx.scale(graph.scale, graph.scale);
+
+  const sel = graph.selected;
+  const neighbors = new Set();
+  if (sel) {
+    neighbors.add(sel);
+    for (const e of graph.edges) {
+      if (e.a === sel) neighbors.add(e.b);
+      if (e.b === sel) neighbors.add(e.a);
+    }
+  }
+
+  // edges
+  for (const e of graph.edges) {
+    const active = !sel || (neighbors.has(e.a) && neighbors.has(e.b) && (e.a === sel || e.b === sel));
+    ctx.strokeStyle = active ? "rgba(139,92,246,0.5)" : "rgba(138,143,154,0.12)";
+    ctx.lineWidth = Math.min(3, 0.6 + e.w * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(e.a.x, e.a.y);
+    ctx.lineTo(e.b.x, e.b.y);
+    ctx.stroke();
+  }
+  // nodes
+  for (const n of graph.nodes) {
+    const dim = sel && !neighbors.has(n);
+    ctx.globalAlpha = dim ? 0.25 : 1;
+    ctx.fillStyle = tagColor(n.tag);
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    ctx.fill();
+    if (n === sel) {
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    // label for larger / selected / hovered nodes
+    if (n.r > 9 || n === sel || n === graph.hover) {
+      ctx.globalAlpha = dim ? 0.4 : 1;
+      ctx.fillStyle = "#dde8f1";
+      ctx.font = "11px 'JetBrains Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(tagLabel(n.tag), n.x, n.y + n.r + 12);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// pointer → graph coords
+function toGraph(px, py) {
+  return { x: (px - graph.ox) / graph.scale, y: (py - graph.oy) / graph.scale };
+}
+function nodeAt(px, py) {
+  const p = toGraph(px, py);
+  for (let i = graph.nodes.length - 1; i >= 0; i--) {
+    const n = graph.nodes[i];
+    if ((n.x - p.x) ** 2 + (n.y - p.y) ** 2 <= (n.r + 4) ** 2) return n;
+  }
+  return null;
+}
+
+function initGraphCanvas() {
+  const canvas = $("graph-canvas");
+  const rectXY = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  };
+  canvas.addEventListener("mousedown", (e) => {
+    const [px, py] = rectXY(e);
+    const n = nodeAt(px, py);
+    graph.drag = n
+      ? { node: n, sx: px, sy: py, moved: false }
+      : { pan: true, sx: px, sy: py, ox: graph.ox, oy: graph.oy, moved: false };
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (state.view !== "graph") return;
+    const [px, py] = rectXY(e);
+    if (graph.drag?.node) {
+      const dist = Math.hypot(px - graph.drag.sx, py - graph.drag.sy);
+      if (!graph.drag.moved && dist < 4) return; // click jitter, not a drag yet
+      graph.drag.moved = true;
+      const p = toGraph(px, py);
+      graph.drag.node.x = p.x;
+      graph.drag.node.y = p.y;
+      graph.drag.node.vx = graph.drag.node.vy = 0;
+      graph.ticks = Math.min(graph.ticks, 200); // nudge sim awake
+    } else if (graph.drag?.pan) {
+      const dx = px - graph.drag.sx, dy = py - graph.drag.sy;
+      if (!graph.drag.moved && Math.hypot(dx, dy) < 4) return; // ignore click jitter
+      graph.drag.moved = true;
+      graph.ox = graph.drag.ox + dx;
+      graph.oy = graph.drag.oy + dy;
+    } else {
+      graph.hover = nodeAt(px, py);
+      canvas.style.cursor = graph.hover ? "pointer" : "grab";
+    }
+  });
+  window.addEventListener("mouseup", () => {
+    if (!graph.drag) return;
+    const d = graph.drag;
+    graph.drag = null;
+    if (d.moved) return; // a real drag — not a click, don't change selection
+    if (d.node) {
+      graph.selected = graph.selected === d.node ? null : d.node;
+      updateGraphTip(graph.selected);
+    } else {
+      // click on empty space clears any selection
+      graph.selected = null;
+      updateGraphTip(null);
+    }
+  });
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const [px, py] = rectXY(e);
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const p = toGraph(px, py);
+      graph.scale = Math.max(0.3, Math.min(3, graph.scale * factor));
+      graph.ox = px - p.x * graph.scale;
+      graph.oy = py - p.y * graph.scale;
+    },
+    { passive: false }
+  );
+}
+
+function updateGraphTip(n) {
+  const tip = $("graph-tip");
+  if (!n) {
+    tip.classList.add("hidden");
+    return;
+  }
+  const deg = graph.edges.filter((e) => e.a === n || e.b === n).length;
+  tip.innerHTML = `<strong>${esc(n.tag)}</strong> · ${n.count} ${n.count === 1 ? "entry" : "entries"} · ${deg} link${deg === 1 ? "" : "s"}`;
+  tip.classList.remove("hidden");
+}
+
+$("graph-reset").addEventListener("click", () => {
+  graph.scale = 1;
+  graph.ox = 0;
+  graph.oy = 0;
+  graph.selected = null;
+  graph.ticks = 0;
+  updateGraphTip(null);
+});
+
 // ---------- boot ----------
 
 async function enterApp() {
@@ -654,6 +1129,7 @@ async function enterApp() {
   $("app").classList.remove("hidden");
   $("avatar").textContent = state.me.email[0];
   $("account-email").textContent = state.me.email;
+  initGraphCanvas();
   await loadSpaces(); // sets active space before any scoped read
   await Promise.all([loadStats(), loadTags()]);
   await loadEntries();
