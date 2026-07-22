@@ -141,9 +141,11 @@
       <h2>Connections</h2>
       <button id="settings-close" aria-label="Close">✕</button>
     </div>
-    <p class="muted small">Link an AI agent to this journal. Pick where you'll talk to it:</p>
-    <div class="provider-tabs" id="provider-tabs" role="tablist"></div>
-    <div id="provider-pane"></div>
+    <p class="muted small conn-sub">Link an AI agent — pick where you'll talk to it.</p>
+    <div class="conn-body">
+      <nav class="provider-tabs" id="provider-tabs" role="tablist" aria-label="Providers"></nav>
+      <div class="provider-pane" id="provider-pane"></div>
+    </div>
   </dialog>
 
   <script src="/app.js"></script>

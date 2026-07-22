@@ -529,23 +529,31 @@ const PROVIDERS = [
     usesToken: true,
     render: (url, token) => {
       const captureUrl = url.replace(/\/mcp$/, "/api/capture");
+      const tagPrompt =
+        "Return only a CSV of two lowercase tags for the message above — nothing else. Example format: personal,reflection (change the values to fit the message).";
       return `
       <ol class="setup-steps">
-        <li>New Shortcut → add <strong>Dictate Text</strong> (or Ask for Input / Text)</li>
-        <li>Add <strong>Get Contents of URL</strong>, set:
+        <li>New Shortcut → add <strong>Dictate Text</strong></li>
+        <li><strong>Have the Claude app? Auto-tag it</strong> — add <strong>Ask Claude</strong>, pass the <span class="mono">Dictated Text</span> with this prompt (makes entries far more searchable):
+          <div class="copy-row"><pre>${esc(tagPrompt)}</pre><button data-copy="${esc(tagPrompt)}">copy</button></div>
+        </li>
+        <li>Add <strong>Get Contents of URL</strong>:
           <ul>
-            <li>URL — <span class="mono">POST</span> to
+            <li><span class="mono">POST</span> to
               <div class="copy-row"><code>${esc(captureUrl)}</code><button data-copy="${esc(captureUrl)}">copy</button></div>
             </li>
             <li>Header <span class="mono">Authorization</span>:
               <div class="copy-row"><code>Bearer ${esc(token)}</code><button data-copy="Bearer ${esc(token)}">copy</button></div>
             </li>
-            <li>Request Body <strong>JSON</strong>: <span class="mono">content</span> = the dictated text (optional <span class="mono">space</span>, <span class="mono">tags</span>)</li>
+            <li>Request Body <strong>JSON</strong>:
+              <span class="mono">content</span> = Dictated Text ·
+              <span class="mono">tags</span> = Ask Claude's output ·
+              <span class="mono">space</span> = e.g. “From iPhone” (both optional)</li>
           </ul>
         </li>
         <li>Trigger from the Home Screen, Action Button, or “Hey Siri, log to Lapse”.</li>
       </ol>
-      <p class="token-note">Uses the plain capture endpoint (not MCP) — same bearer token, easiest for Shortcuts, share-sheet, or any device that can POST JSON.</p>`;
+      <p class="token-note">Plain capture endpoint (not MCP) — same bearer token, easiest for Shortcuts, share-sheet, or any device that can POST JSON. The Ask Claude step is optional; <span class="mono">tags</span> accepts a comma-separated string.</p>`;
     },
   },
   {
